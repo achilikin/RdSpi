@@ -52,13 +52,10 @@ rdspi dump
 Screenshots
 -----------
 
-[dump](http://3.bp.blogspot.com/-OXuzT8qIl9Y/U4uHJIeWVyI/AAAAAAAAATQ/cm2Y-9AsPI0/s1600/dump.png)
-
-[scan](http://4.bp.blogspot.com/-w3Rr9ScBuhA/U4uHeOIE43I/AAAAAAAAATY/xRO8Dcd-KSw/s1600/scan.png)
-
-[spectrum](http://1.bp.blogspot.com/-7OW7MaMvY_M/U4uHlLo7ZaI/AAAAAAAAATg/le6EdWwt_OI/s1600/spectrum.png)
-
-[rds](http://1.bp.blogspot.com/-Lwb6mZEmLF4/U4uH0sbmRTI/AAAAAAAAATo/-339yycuW_E/s1600/rds.png)
+* [rdspi dump](http://3.bp.blogspot.com/-OXuzT8qIl9Y/U4uHJIeWVyI/AAAAAAAAATQ/cm2Y-9AsPI0/s1600/dump.png)
+* [rdspi scan](http://4.bp.blogspot.com/-w3Rr9ScBuhA/U4uHeOIE43I/AAAAAAAAATY/xRO8Dcd-KSw/s1600/scan.png)
+* [rdspi spectrum](http://1.bp.blogspot.com/-7OW7MaMvY_M/U4uHlLo7ZaI/AAAAAAAAATg/le6EdWwt_OI/s1600/spectrum.png)
+* [rdspi rds](http://1.bp.blogspot.com/-Lwb6mZEmLF4/U4uH0sbmRTI/AAAAAAAAATo/-339yycuW_E/s1600/rds.png)
 
 Links
 -----
