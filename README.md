@@ -25,19 +25,19 @@ whatever amplifier you have to LOUT/ROUT. [Adafruit MAX98306](http://www.adafrui
 
 Make RdSpi. It accepts one command at a time:
 
-* _reset_ - resets and powers up Si4703, dumps register map while resetting
-* _power on|down_ - powers Si4703 up or down
-* _dump_ - dumps Si4703 register
-* _spacing kHz_ - sets 200, 100, or 50 kHz spacing
-* _scan_ (mode) - scans for radio stations, mode can be specified 1-5, see [AN230](http://www.silabs.com/Support%20Documents/TechnicalDocs/AN230.pdf), Table 23. Summary of Seek Settings
-* _spectrum_ - scans full FM band and prints RSSI
-* _seek up|down_ - seeks to the next/prev station
-* _tune freq_  - tunes to specified FM frequency, for example `rdspi tune 9500` to tune to 95.00 MHz
-* _rds on|off|verbose_ - sets RDS mode, on/off for RDSPRF, verbose for RDSM
-* _rds gt_ - RDS Group Type to scan for, for example 0 for basic tuning and switching information
-* _rds_ - scan for complete RDS PS and Radiotext messages with 15 seconds timeout
-* _volume 0-15_ - set audio volume, 0 to mute
-* _set register=value_ - set specified register
+* _reset_** - resets and powers up Si4703, dumps register map while resetting
+* _power on|down_** - powers Si4703 up or down
+* _dump_** - dumps Si4703 register
+* _spacing kHz_** - sets 200, 100, or 50 kHz spacing
+* _scan (mode)_** - scans for radio stations, mode can be specified 1-5, see [AN230](http://www.silabs.com/Support%20Documents/TechnicalDocs/AN230.pdf), Table 23. Summary of Seek Settings
+* _spectrum_** - scans full FM band and prints RSSI
+* _seek up|down_** - seeks to the next/prev station
+* _tune freq_**  - tunes to specified FM frequency, for example `rdspi tune 9500` to tune to 95.00 MHz
+* _rds on|off|verbose_** - sets RDS mode, on/off for RDSPRF, verbose for RDSM
+* _rds gt_** - RDS Group Type to scan for, for example 0 for basic tuning and switching information
+* _rds_** - scan for complete RDS PS and Radiotext messages with 15 seconds timeout
+* _volume 0-15_** - set audio volume, 0 to mute
+* _set register=value_** - set specified register
 
 It is better to start with `reset` :)
 
@@ -53,8 +53,11 @@ Screenshots
 -----------
 
 [dump](http://3.bp.blogspot.com/-OXuzT8qIl9Y/U4uHJIeWVyI/AAAAAAAAATQ/cm2Y-9AsPI0/s1600/dump.png)
+
 [scan](http://4.bp.blogspot.com/-w3Rr9ScBuhA/U4uHeOIE43I/AAAAAAAAATY/xRO8Dcd-KSw/s1600/scan.png)
+
 [spectrum](http://1.bp.blogspot.com/-7OW7MaMvY_M/U4uHlLo7ZaI/AAAAAAAAATg/le6EdWwt_OI/s1600/spectrum.png)
+
 [rds](http://1.bp.blogspot.com/-Lwb6mZEmLF4/U4uH0sbmRTI/AAAAAAAAATo/-339yycuW_E/s1600/rds.png)
 
 Links
@@ -66,4 +69,4 @@ Links
 * Si4700/01/02/03 Firmware Change List, AN281: *Not on SiLabs site anymore, [google](https://www.google.com/search?q=Si4700%2F01%2F02%2F03+Firmware+Change+List%2C+AN281) for it*
 * [Using RDS/RBDS with the Si4701/03](http://www.silabs.com/Support%20Documents/TechnicalDocs/AN243.pdf)
 * [Si4700/01/02/03 Programming Guide](http://www.silabs.com/Support%20Documents/TechnicalDocs/AN230.pdf)
-* [RBDS Standard](ftp://ftp.rds.org.uk/pub/acrobat/rbds1998.pdf)
+* RBDS Standard: ftp://ftp.rds.org.uk/pub/acrobat/rbds1998.pdf
