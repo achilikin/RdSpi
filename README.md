@@ -25,19 +25,19 @@ whatever amplifier you have to LOUT/ROUT. [Adafruit MAX98306](http://www.adafrui
 
 Make RdSpi. It accepts one command at a time:
 
-* _reset_** - resets and powers up Si4703, dumps register map while resetting
-* _power on|down_** - powers Si4703 up or down
-* _dump_** - dumps Si4703 register
-* _spacing kHz_** - sets 200, 100, or 50 kHz spacing
-* _scan (mode)_** - scans for radio stations, mode can be specified 1-5, see [AN230](http://www.silabs.com/Support%20Documents/TechnicalDocs/AN230.pdf), Table 23. Summary of Seek Settings
-* _spectrum_** - scans full FM band and prints RSSI
-* _seek up|down_** - seeks to the next/prev station
-* _tune freq_**  - tunes to specified FM frequency, for example `rdspi tune 9500` to tune to 95.00 MHz
-* _rds on|off|verbose_** - sets RDS mode, on/off for RDSPRF, verbose for RDSM
-* _rds gt_** - RDS Group Type to scan for, for example 0 for basic tuning and switching information
-* _rds_** - scan for complete RDS PS and Radiotext messages with 15 seconds timeout
-* _volume 0-15_** - set audio volume, 0 to mute
-* _set register=value_** - set specified register
+* **_reset_** - resets and powers up Si4703, dumps register map while resetting
+* **_power on|down_** - powers Si4703 up or down
+* **_dump_** - dumps Si4703 register
+* **_spacing kHz_** - sets 200, 100, or 50 kHz spacing
+* **_scan (mode)_** - scans for radio stations, mode can be specified 1-5, see [AN230](http://www.silabs.com/Support%20Documents/TechnicalDocs/AN230.pdf), Table 23. Summary of Seek Settings
+* **_spectrum_** - scans full FM band and prints RSSI
+* **_seek up|down_** - seeks to the next/prev station
+* **_tune freq_**  - tunes to specified FM frequency, for example `rdspi tune 9500` to tune to 95.00 MHz
+* **_rds on|off|verbose_** - sets RDS mode, on/off for RDSPRF, verbose for RDSM
+* **_rds gt_** - RDS Group Type to scan for, for example 0 for basic tuning and switching information
+* **_rds_** - scan for complete RDS PS and Radiotext messages with 15 seconds timeout
+* **_volume 0-15_** - set audio volume, 0 to mute
+* **_set register=value_** - set specified register
 
 It is better to start with `reset` :)
 
