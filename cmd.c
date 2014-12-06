@@ -20,10 +20,10 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#include "rpi_pin.h"
-#include "rpi_i2c.h"
 #include "cmd.h"
+#include "pi2c.h"
 #include "si4703.h"
+#include "rpi_pin.h"
 
 #define RSSI_LIMIT 35
 #define DEFAULT_STATION 9500 // Local station with the good signal strength
@@ -39,9 +39,10 @@ int cmd_reset(const char *arg __attribute__((unused)))
 	uint16_t si_regs[16];
 	si_read_regs(si_regs);
 
-	rpi_set_pin_mode(SI_RESET, RPI_GPIO_OUT_LOW);
+	rpi_pin_set_dir(SI_RESET, RPI_OUTPUT);
+	rpi_pin_set(SI_RESET, 0);
 	rpi_delay_ms(10);
-	rpi_set_pin_mode(SI_RESET, RPI_GPIO_IN);
+	rpi_pin_set_dir(SI_RESET, RPI_INPUT);
 	rpi_delay_ms(1);
 
 	if (si_read_regs(si_regs) != 0) {
@@ -59,7 +60,7 @@ int cmd_reset(const char *arg __attribute__((unused)))
 	// the only way to reliable start the device is to powerdown and powerup
 	// just powering up does not work for me after cold start
 	uint8_t powerdown[2] = { 0, PWR_DISABLE | PWR_ENABLE };
-	rpi_i2c_write(powerdown, 2);
+	pi2c_write(PI2C_BUS, powerdown, 2);
 	rpi_delay_ms(110);
 
 	cmd_power("up");

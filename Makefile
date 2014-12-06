@@ -2,11 +2,12 @@ CXX = g++
 CFLAGS = -Wall -Werror
 CFLAGS += -g
 #CFLAGS += -O3
-LIBS    = -lbcm2835
+#CFLAGS += -std=gnu99
+LIBS    = 
 
 CORE = rdspi
-OBJS = main.o rpi_pin.o si4703.o cmd.o
-FILES = Makefile rpi_i2c.h rpi_pin.h rpi_pin.c si4703.h si4703.c cmd.c main.c
+OBJS = cmd.o main.o pi2c.o rpi_pin.o si4703.o 
+FILES = Makefile cmd.c main.c pi2c.h pi2c.c rpi_pin.h rpi_pin.c si4703.h si4703.c
 
 all: $(CORE)
 

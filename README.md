@@ -8,8 +8,6 @@ Si4703 based RDS scanner for Raspberry Pi using Si4703S-B16 breakout board PL102
 Installation
 ------------
 
-Download and install Mike McCauley's [bcm2835 library](http://www.airspayce.com/mikem/bcm2835/)
-
 Connect PL102RT-S V1.5 breakout to Rpi:
 
 | RPi   | PL102RT-S |

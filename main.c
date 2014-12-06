@@ -20,8 +20,8 @@
 #include <string.h>
 
 #include "cmd.h"
+#include "pi2c.h"
 #include "rpi_pin.h"
-#include "rpi_i2c.h"
 #include "si4703.h"
 
 cmd_t commands[] = {
@@ -38,22 +38,24 @@ cmd_t commands[] = {
 	{ "set", cmd_set },
 };
 
-uint32_t ncmd = sizeof(commands)/sizeof(commands[0]);
-
+static const uint32_t ncmd = sizeof(commands)/sizeof(commands[0]);
 
 int main(int argc, char **argv)
 {
 	uint16_t si_regs[16];
 	memset(si_regs, 0, sizeof(si_regs));
 
-	if (rpi_init() != 0) {
-		printf("Unable to init bcm2835!\n");
-		return -1;
+	if (argc == 1) {
+		printf("Supported commands:\n");
+		for(uint32_t i = 0; i < ncmd; i++) {
+			printf("    %s\n", commands[i].name);
+		}
+		return 0;
 	}
 
-	rpi_i2c_open(0);
-	rpi_i2c_config(I2C_SPEED_100K);
-	rpi_i2c_set_slave(SI4703_ADDR);
+	rpi_pin_init(RPI_REV2);
+	pi2c_open(PI2C_BUS);
+	pi2c_select(PI2C_BUS, SI4703_ADDR);
 
 	const char *arg = NULL;
 	if (argc > 2)
@@ -64,7 +66,6 @@ int main(int argc, char **argv)
 			return commands[i].cmd(arg);
 	}
 
-	rpi_i2c_close();
-	rpi_close();
+	pi2c_close(PI2C_BUS);
 	return 0;
 }

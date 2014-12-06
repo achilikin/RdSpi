@@ -43,7 +43,7 @@ RBDS Standard:
 
 #include "si4703.h"
 #include "rpi_pin.h"
-#include "rpi_i2c.h"
+#include "pi2c.h"
 
 struct si4703_state {
 	const char *name;
@@ -134,7 +134,7 @@ int si_read_regs(uint16_t *regs)
 {
 	uint8_t buf[32];
 
-	if (rpi_i2c_read(buf, 32) < 0)
+	if (pi2c_read(PI2C_BUS, buf, 32) < 0)
 		return -1;
 
 	// Si4703 sends back registers as 10, 11, 12, 13, 14, 15, 0, ...
@@ -248,7 +248,7 @@ int si_update(uint16_t *regs)
 		buf[i++] = regs[reg] & 0x00FF;
 	}
 
-	ret = rpi_i2c_write(buf, i);
+	ret = pi2c_write(PI2C_BUS, buf, i);
 	return ret;
 }
 
