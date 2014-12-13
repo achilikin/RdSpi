@@ -55,7 +55,7 @@ extern "C" {
 #define SI4703_ADDR 0x10
 #define SI_RESET 23
 
-//Define the register names
+// Define the register names
 #define DEVICEID   0x00
 #define CHIPID     0x01
 #define POWERCFG   0x02
@@ -135,21 +135,19 @@ extern "C" {
 #define RDSC       0x0E
 #define RDSD       0x0F
 
-int si_read_regs(uint16_t *regs);
-int si_update(uint16_t *regs);
+int  si_read_regs(uint16_t *regs);
+int  si_update(uint16_t *regs);
 void si_dump(uint16_t *regs, const char *title, uint16_t span);
 void si_power(uint16_t *regs, uint16_t mode);
 void si_set_volume(uint16_t *regs, int volume);
 
-int si_get_freq(uint16_t *regs);
-int si_seek(uint16_t *regs, int dir);
+int  si_get_freq(uint16_t *regs);
+int  si_seek(uint16_t *regs, int dir);
 void si_set_channel(uint16_t *regs, int chan);
 void si_tune(uint16_t *regs, int freq);
 
 int  si_set_state(uint16_t *regs, const char *name, uint16_t val);
 void si_set_rdsprf(uint16_t *regs, int set);
-void si_rds_dump(uint16_t *regs, uint16_t pr_mask, int timeout);
-int  si_rds_get_ps(char *ps_name, uint16_t *regs, int timeout);
 
 extern int si_band[3][2];
 extern int si_space[3];

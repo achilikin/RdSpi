@@ -27,33 +27,30 @@ extern "C" {
 #endif
 #endif
 
-typedef int (*cmd_handler)(const char *arg);
+typedef int (*cmd_handler)(char *arg);
 
 typedef struct cmd {
 	const char *name;
+	const char *help;
 	cmd_handler cmd;
 } cmd_t;
 
-int cmd_dump(const char *arg);
-int cmd_reset(const char *arg);
-int cmd_power(const char *arg);
-int cmd_scan(const char *arg);
-int cmd_spectrum(const char *arg);
-int cmd_spacing(const char *arg);
-int cmd_seek(const char *arg);
-int cmd_tune(const char *arg);
-int cmd_rds(const char *arg);
-int cmd_volume(const char *arg);
-int cmd_set(const char *arg);
+int cmd_dump(char *arg);
+int cmd_reset(char *arg);
+int cmd_power(char *arg);
+int cmd_scan(char *arg);
+int cmd_spectrum(char *arg);
+int cmd_spacing(char *arg);
+int cmd_seek(char *arg);
+int cmd_tune(char *arg);
+int cmd_monitor(char *arg);
+int cmd_volume(char *arg);
+int cmd_set(char *arg);
 
-inline int str_is(const char *str, const char *is)
-{
-	return strcmp(str, is) == 0;
-}
+int cmd_arg(char *cmd, const char *str, char **arg);
+int cmd_is(char *str, const char *is);
 
 #ifdef __cplusplus
 }
 #endif
-
-
 #endif

@@ -37,13 +37,14 @@ Si4700/01/02/03 Programming Guide:
 RBDS Standard:
 	ftp://ftp.rds.org.uk/pub/acrobat/rbds1998.pdf
 */
-
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "rds.h"
+#include "pi2c.h"
 #include "si4703.h"
 #include "rpi_pin.h"
-#include "pi2c.h"
 
 struct si4703_state {
 	const char *name;
@@ -107,7 +108,7 @@ struct si4703_state {
 int si_band[3][2] = { {8750, 10800}, {7600, 10800}, {7600, 9000}};
 int si_space[3] = { 20, 10, 5 };
 
-inline int str_is(const char *str, const char *is)
+inline int cmd_is(const char *str, const char *is)
 {
 	return strcmp(str, is) == 0;
 }
@@ -117,7 +118,7 @@ int si_set_state(uint16_t *regs, const char *name, uint16_t val)
 	uint16_t current;
 	int nstates = sizeof(si_state)/sizeof(si_state[0]);
 	for(int i = 0; i < nstates; i++) {
-		if (str_is(si_state[i].name, name)) {
+		if (cmd_is(si_state[i].name, name)) {
 			current = regs[si_state[i].reg] & si_state[i].mask;
 			current >>= si_state[i].offset;
 			val <<= si_state[i].offset;
@@ -410,179 +411,4 @@ void si_power(uint16_t *regs, uint16_t mode)
 	si_update(regs);
 	// recommended powerup time
 	rpi_delay_ms(110);
-}
-
-void si_rds_dump(uint16_t *regs, uint16_t pr_mask, int timeout)
-{ 
-	int endTime = 0;
-	char ps_name[16];
-	char rt_text[80];
-	uint16_t ps_mask = 0; // mask of PS segments processed
-	uint16_t rt_mask = 0; // mask of radiotext segments processed
-	uint16_t di_mask = 0; // DI mask
-	uint16_t gt_mask = 0; // mask of groups detected
-	uint16_t end_mask = 0xFFFF;
-
-	memset(ps_name, ' ', sizeof(ps_name));
-	memset(rt_text, ' ', sizeof(rt_text));
-
-	ps_name[8] = '\0';
-	rt_text[64] = '\0';
-
-	while(endTime < timeout) {
-		if ((rt_mask == end_mask) && (ps_mask == 0x0F))
-			break;
-		si_read_regs(regs);
-		if(regs[STATUSRSSI] & RDSR) {
-			uint16_t gt  = (regs[RDSB] >> 12) & 0x0F; // group type
-			uint16_t ver = (regs[RDSB] >> 11) & 0x01; // version
-			uint16_t tp  = (regs[RDSB] >> 10) & 0x01; // Traffic Program
-			uint16_t pty = (regs[RDSB] >> 5) & 0x1F;
-			gt_mask |= _BM(gt);
-
-			// if print for this group disabled, continue
-			if (pr_mask & _BM(gt)) {
-				printf("%04X %04X %04X %04X ", regs[RDSA], regs[RDSB], regs[RDSC], regs[RDSD]);
-				printf("| GT %02d%X PTY %d TP %d ", gt, 0x0A + ver, pty, tp);
-			}
-
-			if (gt == 0) { // basic tuning and switching information
-				uint16_t ta  = (regs[RDSB] >> 4) & 0x01; // Traffic Announcement
-				uint16_t ms  = (regs[RDSB] >> 3) & 0x01; // Music/Speech
-				uint16_t di  = (regs[RDSB] >> 2) & 0x01; // Decoder control bit
-				uint16_t idx = (regs[RDSB] & 0x03); // PS name
-				if (di)
-					di_mask |= _BM(3-idx);
-				else
-					di_mask &= ~_BM(3-idx);
-				if (pr_mask & _BM(0))
-					printf("TA %d MS %d DI %d idx %d | ", ta, ms, di_mask, idx);
-				ps_mask |= _BM(idx);
-				idx <<= 1;
-				ps_name[idx] = regs[RDSD] >> 8;
-				if (ps_name[idx] < ' ') ps_name[idx] = '?';
-				ps_name[idx+1] = regs[RDSD] & 0xFF;
-				if (ps_name[idx+1] < ' ') ps_name[idx+1] = '?';
-				if (pr_mask & _BM(0))
-					printf("'%s'", ps_name);
-			}
-			if (gt == 2) { // Radiotext
-				uint16_t ab = (regs[RDSB] >> 4) & 0x01;
-				uint16_t seg = regs[RDSB] & 0x0F;
-				if (pr_mask & _BM(2))
-					printf("A/B %d Segment %2d ", ab, seg);
-				rt_mask |= _BM(seg);
-				uint16_t idx = seg << 2;
-				char ch = regs[RDSC] >> 8;
-				if (ch == '\r') { end_mask = 0xFFFF >> (15 - seg); ch = '^'; }
-				if (ch < ' ') ch = '?';
-				rt_text[idx] = ch;
-				ch = regs[RDSC] & 0xFF;
-				if (ch == '\r') { end_mask = 0xFFFF >> (15 - seg); ch = '^'; }
-				if (ch < ' ') ch = '?';
-				rt_text[idx+1] = ch;
-				ch = regs[RDSD] >> 8;
-				if (ch == '\r') { end_mask = 0xFFFF >> (15 - seg); ch = '^'; }
-				if (ch < ' ') ch = '?';
-				rt_text[idx+2] = ch;
-				ch = regs[RDSD] & 0xFF;
-				if (ch == '\r') { end_mask = 0xFFFF >> (15 - seg); ch = '^'; }
-				if (ch < ' ') ch = '?';
-				rt_text[idx+3] = ch;
-				if (pr_mask & _BM(2))
-					printf("'%s'", rt_text);
-			}
-			if (pr_mask & _BM(gt))
-				printf("\n");
-			rpi_delay_ms(40); // Wait for the RDS bit to clear, from AN230
-			endTime += 40;
-		}
-		else {
-			rpi_delay_ms(30);
-			endTime += 30;
-		}
-	}
-	printf("scanned in %d ms, active groups %04X\n", endTime, gt_mask);
-}
-
-int si_rds_get_ps(char *ps_name, uint16_t *regs, int timeout)
-{ 
-	int dt = 0;
-	uint16_t ps_mask = 0; // mask of PS segments processed
-
-	memset(ps_name, ' ', 8);
-	ps_name[8] = '\0';
-
-	while(dt < timeout) {
-		if (ps_mask == 0x0F)
-			return regs[RDSA];
-		si_read_regs(regs);
-		if(regs[STATUSRSSI] & RDSR) {
-			uint16_t gt  = (regs[RDSB] >> 12) & 0x0F; // group type
-			if (gt == 0) { // basic tuning and switching information
-				uint16_t idx = (regs[RDSB] & 0x03); // PS name
-				ps_mask |= _BM(idx);
-				idx <<= 1;
-				ps_name[idx] = regs[RDSD] >> 8;
-				if (ps_name[idx] < ' ') ps_name[idx] = '?';
-				ps_name[idx+1] = regs[RDSD] & 0xFF;
-				if (ps_name[idx+1] < ' ') ps_name[idx+1] = '?';
-			}
-			rpi_delay_ms(40); // Wait for the RDS bit to clear
-			dt += 40;
-		}
-		else {
-			rpi_delay_ms(30);
-			dt += 30;
-		}
-	}
-
-	return -1;
-}
-
-int si_rds_get_rt(char *rt_text, uint16_t *regs, int timeout)
-{ 
-	int dt = 0;
-	uint16_t rt_mask = 0; // mask of radiotext segments processed
-	uint16_t end_mask = 0xFFFF; // mask of radiotext segments processed
-
-	memset(rt_text, ' ', 64);
-	rt_text[64] = '\0';
-
-	while(dt < timeout) {
-		if (rt_mask == end_mask)
-			return 0;
-		si_read_regs(regs);
-		if(regs[STATUSRSSI] & RDSR) {
-			uint16_t gt  = (regs[RDSB] >> 12) & 0x0F; // group type
-			if (gt == 2) { // Radiotext
-				uint16_t seg = regs[RDSB] & 0x0F;
-				rt_mask |= _BM(seg);
-				uint16_t idx = seg << 2;
-				char ch = regs[RDSC] >> 8;
-				if (ch == '\r') { end_mask = 0xFFFF >> (15 - seg); ch = '^'; }
-				if (ch < ' ') ch = '?';
-				rt_text[idx] = ch;
-				ch = regs[RDSC] & 0xFF;
-				if (ch == '\r') { end_mask = 0xFFFF >> (15 - seg); ch = '^'; }
-				if (ch < ' ') ch = '?';
-				rt_text[idx+1] = ch;
-				ch = regs[RDSD] >> 8;
-				if (ch == '\r') { end_mask = 0xFFFF >> (15 - seg); ch = '^'; }
-				if (ch < ' ') ch = '?';
-				rt_text[idx+2] = ch;
-				ch = regs[RDSD] & 0xFF;
-				if (ch == '\r') { end_mask = 0xFFFF >> (15 - seg); ch = '^'; }
-				if (ch < ' ') ch = '?';
-				rt_text[idx+3] = ch;
-			}
-			rpi_delay_ms(40);
-			dt += 40;
-		}
-		else {
-			rpi_delay_ms(30);
-			dt += 30;
-		}
-	}
-	return -1;
 }
