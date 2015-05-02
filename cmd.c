@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <poll.h>
 #include <termios.h>
+#include <math.h>
 
 #include "cmd.h"
 #include "rds.h"
@@ -29,7 +30,7 @@
 #include "rpi_pin.h"
 
 #define RSSI_LIMIT 35
-#define DEFAULT_STATION 9500 // Local station with the good signal strength
+#define DEFAULT_STATION 9770 // Local station with the good signal strength: CHOM Montreal
 
 inline const char *is_on(uint16_t mask)
 {
@@ -389,8 +390,14 @@ int cmd_tune(char *arg)
 	int	freq = DEFAULT_STATION;
 	uint16_t si_regs[16];
 
-	if (arg)
-		freq = atoi(arg);
+        // get target frequency as an int or a float
+	if (arg) {
+            if (index(arg,'.')>=0) { // something like 97.7
+		freq = round(atof(arg) * 100);
+                }
+            else freq = atoi(arg);
+	    printf("Tuning to %d.%02dMHz\n", freq/100, freq%100);
+            }
 
 	si_read_regs(si_regs);
 	si_tune(si_regs, freq);
@@ -752,6 +759,14 @@ int cmd_volume(char *arg)
 	volume = si_regs[SYSCONF2] & VOLUME;
 	if (arg) {
 		volume = atoi(arg);
+
+                // volume over 15 is achieved by un-disabling the volume-boost
+		if (volume>15) {
+		    si_set_state(si_regs, "VOLEXT", 0);
+		    volume -= 15;
+		    }
+		else si_set_state(si_regs, "VOLEXT", 1);
+
 		si_set_volume(si_regs, volume);
 		return 0;
 	}
@@ -766,12 +781,15 @@ int cmd_set(char *arg)
 	const char *pval;
 	char buf[32];
 
+        // no register specified
 	if (arg == NULL)
 		return -1;
 
 	pval = arg;
-	if (pval == NULL)
-		return -1;
+	if (pval == NULL) return -1; // no value specified
+
+        // get name of register in buffer and also
+        // get integer value of argument in val
 	int i;
 	for(i = 0; i < 31; i++) {
 		if (*pval == '=')
@@ -779,13 +797,13 @@ int cmd_set(char *arg)
 		buf[i] = toupper(*pval++);
 	}
 	buf[i] = '\0';
-	if (*pval != '=')
-		return -1;
-
+	if (*pval != '=') return -1;
 	val = (uint16_t)atoi(++pval);
 
 	uint16_t regs[16];
 	si_read_regs(regs);
+
+        // modify the specified register
 	if (si_set_state(regs, buf, val) != -1) {
 		si_update(regs);
 		si_dump(regs, arg, 16);

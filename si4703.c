@@ -300,6 +300,7 @@ void si_tune(uint16_t *regs, int freq)
 	if (freq > si_band[band][1]) freq = si_band[band][1];
 
 	int nchan = (freq - si_band[band][0])/si_space[space];
+        printf("nchan = %d based on freq %d\n",nchan,freq);
 
 	si_set_channel(regs, nchan);
 }
@@ -328,6 +329,7 @@ void si_set_volume(uint16_t *regs, int volume)
 
 	regs[SYSCONF2] &= ~VOLUME; // clear volume bits
 	regs[SYSCONF2] |= volume;  // set new volume
+
 	si_update(regs);
 }
 
