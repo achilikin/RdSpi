@@ -51,6 +51,13 @@ int main(int argc, char **argv)
 		for(uint32_t i = 0; i < ncmd; i++) {
 			printf("    %s: %s\n", commands[i].name, commands[i].help);
 		}
+		printf("Channel spacing of 50, 100 or 200 kHz is possible with the spacing command\n");
+                printf("Band selection for Japan, Japan wideband, or Europe/U.S./Asia is set with BAND[1:0]\n");
+                printf("Seek tuning searches for a channel with RSSI greater than or equal to the value in SEEKTH (set SEEKTH=255)\n");
+                printf("  Optional SNR and/or impulse noise detector criteria may be used to qualify valid stations (set SKSNR=0..15)\n");
+		printf("RDS command details:\n");
+		printf("  RDSPRF (on or off) is a mode to enhance RDS message processing at the expense of FM scanning\n");
+		printf("  RDS verbose:  increases visibility to RDS block-error levels and synchronization status\n");
 		return 0;
 	}
 
