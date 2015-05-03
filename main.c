@@ -25,6 +25,7 @@
 #include "si4703.h"
 
 cmd_t commands[] = {
+	{ "-q", "quiet (no output) flag: effects all commands", 0L },
 	{ "reset", "reset radio module", cmd_reset },
 	{ "power", "power up|down", cmd_power },
 	{ "dump", "dump registers map", cmd_dump },
@@ -34,7 +35,7 @@ cmd_t commands[] = {
 	{ "seek", "seek up|down", cmd_seek },
 	{ "tune", "tune [freq]", cmd_tune },
 	{ "volume", "volume [0-15]", cmd_volume },
-	{ "rds", "rds [on|off|verbose] gt [0,...,15] [time sec] [log]", cmd_monitor },
+	{ "rds", "rds [silently|on|off|verbose] gt [0,...,15] [time sec] [log]", cmd_monitor },
 	{ "set", "set register value", cmd_set },
 };
 
@@ -51,13 +52,14 @@ int main(int argc, char **argv)
 		for(uint32_t i = 0; i < ncmd; i++) {
 			printf("    %s: %s\n", commands[i].name, commands[i].help);
 		}
-		printf("Channel spacing of 50, 100 or 200 kHz is possible with the spacing command\n");
+		printf("Channel scan spacing of 50, 100 or 200 kHz is possible with the spacing command\n");
                 printf("Band selection for Japan, Japan wideband, or Europe/U.S./Asia is set with BAND[1:0]\n");
                 printf("Seek tuning searches for a channel with RSSI greater than or equal to the value in SEEKTH (set SEEKTH=255)\n");
                 printf("  Optional SNR and/or impulse noise detector criteria may be used to qualify valid stations (set SKSNR=0..15)\n");
 		printf("RDS command details:\n");
-		printf("  RDSPRF (on or off) is a mode to enhance RDS message processing at the expense of FM scanning\n");
-		printf("  RDS verbose:  increases visibility to RDS block-error levels and synchronization status\n");
+		printf("  on|off: RDSPRF is a si4703 mode to enhance RDS message processing at the expense of FM scanning\n");
+		printf("  verbose: si4703 increases visibility to RDS block-error levels and synchronization status\n");
+		printf("  silently: don't print running data to stdout\n");
 		return 0;
 	}
 
@@ -67,6 +69,11 @@ int main(int argc, char **argv)
 
 	argbuf[0] = '\0';
 	char *arg = NULL;
+        if (strcmp(argv[1],"-q")==0) {
+            // special handling for this flag.  Kill stdout.
+            stdout = fopen("/dev/null","w");
+            argc--; argv++;
+            }
 	if (argc > 2) {
 		for(int i = 2; i < argc; i++) {
 			if (i > 2)
@@ -77,8 +84,9 @@ int main(int argc, char **argv)
 	}
 
 	for(uint32_t i = 0; i < ncmd; i++) {
-		if (cmd_is(argv[1], commands[i].name))
-			return commands[i].cmd(arg);
+		if (cmd_is(argv[1], commands[i].name)) {
+			if (commands[i].cmd) return commands[i].cmd(arg);
+                }
 	}
 
 	pi2c_close(PI2C_BUS);
