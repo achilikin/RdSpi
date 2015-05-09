@@ -27,9 +27,11 @@
 #include "pi2c.h"
 #include "si4703.h"
 #include "rpi_pin.h"
+// #include "pty_names.h"
+#include "pty_names_na.h"
 
 #define RSSI_LIMIT 35
-#define DEFAULT_STATION 9500 // Local station with the good signal strength
+#define DEFAULT_STATION 9770 // Local station with the good signal strength: CHOM Montreal
 
 inline const char *is_on(uint16_t mask)
 {
@@ -386,11 +388,19 @@ int cmd_seek(char *arg)
 
 int cmd_tune(char *arg)
 {
+        // Tune to a station, specified as either 9770 or 97.7 (for 97.7Mhz)
+
 	int	freq = DEFAULT_STATION;
 	uint16_t si_regs[16];
 
-	if (arg)
-		freq = atoi(arg);
+        // get target frequency as an int or a float
+	if (arg) {
+            if (index(arg,'.')>=0) { // something like 97.7
+		freq = (int)(atof(arg) * 100 +0.5);  //add 0.5 to round
+                }
+            else freq = atoi(arg);
+	    printf("Tuning to %d.%02dMHz\n", freq/100, freq%100);
+            }
 
 	si_read_regs(si_regs);
 	si_tune(si_regs, freq);
@@ -442,10 +452,10 @@ static const char txt_rev[] = { 27, '[', '7', 'm', '\0' }; // reverse text
 static void print_rds_hdr(rds_hdr_t *phdr)
 {
 	printf("%04X %04X %04X %04X ", phdr->rds[0], phdr->rds[1], phdr->rds[2], phdr->rds[3]);
-	printf("| GT %02d%c PTY %2d TP %d | ", phdr->gt, 'A' + phdr->ver, phdr->pty, phdr->tp);
+	printf("| GT %02d%c PTY %2d=%s TP %d | ", phdr->gt, 'A' + phdr->ver, phdr->pty, pty[phdr->pty].name, phdr->tp);
 }
 
-static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, int log)
+static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, int log, int silently)
 { 
 	rds_gt00a_t rd0;
 	rds_gt01a_t rd1;
@@ -474,13 +484,15 @@ static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, i
 
 	int stop = 0;
 	stdin_mode(1);
-	if (!log)
+	if ((!silently) && !log)
 		printf("%s%s%s", clr_all, go_top, cur_hid);
 	printf("monitoring RDS, press any key to terminate...\n");
 
 	while(stop == 0) {
-		if (timeout && (rt_mask == 0xFFFF) && (ps_mask == 0x0F))
+		if (timeout && (rt_mask == 0xFFFF) && (ps_mask == 0x0F)) {
+                        printf("Timeout after %dms since rt_mask == 0xFFFF and ps_mask == 0x0F\n",endTime);
 			break;
+                        }
 		si_read_regs(regs);
 		if (regs[STATUSRSSI] & RDSR) {
 			rds_hdr_t hdr;
@@ -499,7 +511,7 @@ static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, i
 			else
 				gtb_mask |= _BM(gt);
 
-			if (!log) {
+			if ((!silently) && !log) {
 				printf("%s%s", go_top, txt_rev);
 				print_rds_hdr(&hdr);
 				printf("monitoring RDS, press any key to terminate...%s%s\n", clr_eol, txt_nor);
@@ -555,37 +567,44 @@ static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, i
 
 			if (mask & _BM(0)) {
 				ps_mask = rd0.valid;
-				print_rds_hdr(&rd0.hdr);
-				printf("TA %d MS %c DI %X Ci %d PS '%s' AF %d %d (%d): ", 
-					rd0.ta, rd0.ms, rd0.di, rd0.ci, rd0.ps, regs[RDSC] &0xFF, regs[RDSC] >> 8, rd0.naf);
-				for(int i = 0; rd0.af[i]; i++)
-					printf("%d ", 8750 + rd0.af[i]*10);
-				printf("%s\n", log ? "" : clr_eol);
+				if (!silently) {
+				    print_rds_hdr(&rd0.hdr);
+				    printf("TA %d MS %c DI %X Ci %d PS '%s' AF %d %d (%d): ", 
+					    rd0.ta, rd0.ms, rd0.di, rd0.ci, rd0.ps, regs[RDSC] &0xFF, regs[RDSC] >> 8, rd0.naf);
+				    for(int i = 0; rd0.af[i]; i++)
+					    printf("%d ", 8750 + rd0.af[i]*10);
+				    printf("%s\n", log ? "" : clr_eol);
+				    }
 			}
 
 			if (mask & _BM(1)) {
-				print_rds_hdr(&rd1.hdr);
-				printf("RPC %d LA %d VC %d SLC %03X ", 
-					rd1.rpc, rd1.la, rd1.vc, rd1.slc);
-				if (rd1.pinc)
-					printf(" %02d %02d:%02d", rd1.pinc >> 11, 
-					(rd1.pinc >> 6) & 0x1F, rd1.pinc & 0x3F);
-				printf("%s\n", log ? "" : clr_eol);
+				if (!silently) {
+				    print_rds_hdr(&rd1.hdr);
+				    printf("RPC %d LA %d VC %d SLC %03X ", 
+					    rd1.rpc, rd1.la, rd1.vc, rd1.slc);
+				    if (rd1.pinc)
+					    printf(" %02d %02d:%02d", rd1.pinc >> 11, 
+					    (rd1.pinc >> 6) & 0x1F, rd1.pinc & 0x3F);
+				    printf("%s\n", log ? "" : clr_eol);
+				    }
 			}
 
 			if (mask & _BM(2)) {
 				rt_mask = rd2.valid;
-				print_rds_hdr(&rd2.hdr);
-				printf("AB %c Si %2d ", 'A' + rd2.ab, rd2.si);
-				printf("RT '%s'", rd2.rt);
-				printf("%s\n", log ? "" : clr_eol);
+				if (!silently) {
+				    print_rds_hdr(&rd2.hdr);
+				    printf("AB %c Si %2d ", 'A' + rd2.ab, rd2.si);
+				    printf("RT '%s'", rd2.rt);
+				    printf("%s\n", log ? "" : clr_eol);
+				    }
 			}
 
 			if (mask & _BM(3)) {
-				print_rds_hdr(&rd3.hdr);
-				printf("AGTC %d%c Msg %04X AID %04X VC %d ",
-					rd3.agtc, rd3.ver + 'A', rd3.msg, rd3.aid, rd3.vc);
-				if (rd3.vc == 0) {
+				if (!silently) {
+				    print_rds_hdr(&rd3.hdr);
+				    printf("AGTC %d%c Msg %04X AID %04X VC %d ",
+					    rd3.agtc, rd3.ver + 'A', rd3.msg, rd3.aid, rd3.vc);
+				    if (rd3.vc == 0) {
 					printf("LTN %d ", rd3.ltn);
 					if (rd3.afi) printf("AFI ");
 					if (rd3.m)	 printf("M ");
@@ -593,13 +612,15 @@ static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, i
 					if (rd3.n)	 printf("N ");
 					if (rd3.r)	 printf("R ");
 					if (rd3.u)	 printf("U ");
-				}
-				else {
-					printf("SID %d ", rd3.sid);
-					if (rd3.m)
+				    }
+				    else {
+					    printf("SID %d ", rd3.sid);
+					    if (rd3.m) {
 						printf("G %d Ta %d Tw %d Td %d", rd3.g, rd3.ta, rd3.tw, rd3.td);
+						}
+				    }
 				}
-				printf("%s\n", log ? "" : clr_eol);
+				if (!silently) printf("%s\n", log ? "" : clr_eol);
 			}
 
 			if (mask & _BM(4)) {
@@ -614,7 +635,7 @@ static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, i
 				printf("%s\n", log ? "" : clr_eol);
 			}
 
-			if (mask & _BM(8)) {
+			if ((!silently) && (mask & _BM(8))) {
 				// check if 8A is Alert-C 
 				print_rds_hdr(&rd8.hdr);
 				if (rd3.agtc == 8 && rd3.ver == 0 && rd3.aid == 0xCD46) {
@@ -630,20 +651,20 @@ static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, i
 				printf("%s\n", log ? "" : clr_eol);
 			}
 
-			if (mask & _BM(10)) {
+			if ((!silently) && (mask & _BM(10))) {
 				print_rds_hdr(&rd10.hdr);
 				printf("AB %c Ci %d PTYN '%s'", 'A' + rd10.ab, rd10.ci, rd10.ps);
 				printf("%s\n", log ? "" : clr_eol);
 			}
 
-			if (mask & _BM(14)) {
+			if ((!silently) && (mask & _BM(14))) {
 				print_rds_hdr(&rd14.hdr);
 				printf("TP %d VC %2d ", rd14.tp_on, rd14.variant);
 				printf("I %04X ", rd14.info);
 				printf("PI %04X ", rd14.pi_on);
 				printf("PS '%s' ", rd14.ps);
 				if (rd14.avc & _BM(13))
-					printf("PTY %2d TA %d ", rd14.pty >> 11, rd14.pty & 0x01);
+					printf("PTY %2d=%s TA %d ", rd14.pty >> 11, pty[rd14.pty >> 11].name, rd14.pty & 0x01);
 				if (rd14.avc & _BM(14))
 					printf("PIN %04X", rd14.pin);
 				printf("%s\n", log ? "" : clr_eol);
@@ -654,8 +675,10 @@ static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, i
 			endTime += 30;
 		}
 
-		if (timeout && (endTime >= timeout))
+		if (timeout && (endTime >= timeout)) {
+                        printf("Timeout after %d ms\n",endTime);
 			break;
+                        }
 		stop = stdin_getch(0);
 	}
 
@@ -680,12 +703,12 @@ static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, i
 		}
 		printf("\n");
 	}
-	if (!log)
-		printf("%s", cur_vis);
+	if (!log) printf("%s", cur_vis);
 }
 
 int cmd_monitor(char *arg)
 {
+        int run_silently = 0;
 	int log = 0;
 	uint16_t si_regs[16];
 	uint16_t gtmask = 0xFFFF;
@@ -693,6 +716,9 @@ int cmd_monitor(char *arg)
 
 	si_read_regs(si_regs);
 
+	if (cmd_is(arg, "silently")) {
+                run_silently = 1;
+	}
 	if (cmd_is(arg, "on")) {
 		si_set_rdsprf(si_regs, 1);
 		si_update(si_regs);
@@ -739,7 +765,7 @@ int cmd_monitor(char *arg)
 	if (cmd_is(arg, "log"))
 		log = 1;
 
-	cmd_monitor_si(si_regs, gtmask, timeout, log);
+	cmd_monitor_si(si_regs, gtmask, timeout, log, run_silently);
 	return 0;
 }
 
@@ -752,6 +778,14 @@ int cmd_volume(char *arg)
 	volume = si_regs[SYSCONF2] & VOLUME;
 	if (arg) {
 		volume = atoi(arg);
+
+                // volume over 15 is achieved by un-disabling the volume-boost
+		if (volume>15) {
+		    si_set_state(si_regs, "VOLEXT", 0);
+		    volume -= 15;
+		    }
+		else si_set_state(si_regs, "VOLEXT", 1);
+
 		si_set_volume(si_regs, volume);
 		return 0;
 	}
@@ -766,12 +800,15 @@ int cmd_set(char *arg)
 	const char *pval;
 	char buf[32];
 
+        // no register specified
 	if (arg == NULL)
 		return -1;
 
 	pval = arg;
-	if (pval == NULL)
-		return -1;
+	if (pval == NULL) return -1; // no value specified
+
+        // get name of register in buffer and also
+        // get integer value of argument in val
 	int i;
 	for(i = 0; i < 31; i++) {
 		if (*pval == '=')
@@ -779,13 +816,13 @@ int cmd_set(char *arg)
 		buf[i] = toupper(*pval++);
 	}
 	buf[i] = '\0';
-	if (*pval != '=')
-		return -1;
-
+	if (*pval != '=') return -1;
 	val = (uint16_t)atoi(++pval);
 
 	uint16_t regs[16];
 	si_read_regs(regs);
+
+        // modify the specified register
 	if (si_set_state(regs, buf, val) != -1) {
 		si_update(regs);
 		si_dump(regs, arg, 16);

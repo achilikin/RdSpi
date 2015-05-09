@@ -46,6 +46,8 @@ RBDS Standard:
 #include "si4703.h"
 #include "rpi_pin.h"
 
+int debug=0;
+
 struct si4703_state {
 	const char *name;
 	uint8_t  reg;
@@ -291,6 +293,10 @@ void si_set_channel(uint16_t *regs, int chan)
 // freq: 9500 for 95.00 MHz
 void si_tune(uint16_t *regs, int freq)
 {
+        // assure range is valid for si4703 or unexpected frequencies will be tuned
+        if (freq<7600) freq=7600;
+        if (freq>10800) freq=10800;
+
 	si_read_regs(regs);
 
 	int band = (regs[SYSCONF2] >> 6) & 0x03;
@@ -300,12 +306,22 @@ void si_tune(uint16_t *regs, int freq)
 	if (freq > si_band[band][1]) freq = si_band[band][1];
 
 	int nchan = (freq - si_band[band][0])/si_space[space];
+        if (debug) printf("nchan = %d based on freq %d\n",nchan,freq);
 
 	si_set_channel(regs, nchan);
 }
 
 void si_set_rdsprf(uint16_t *regs, int set)
 {
+        // The Si4703 offers an RDS high-performance mode for RDS-only applications 
+        // such as TMC (traffic message channel) coupled with a GPS device. The RDS 
+        // performance bit RDSPRF 06h[9] is disabled by default for backwards compatibility 
+        // with previous RDS firmware releases. When RDSPRF is enabled the device increases 
+        // power to the LNA, sets RDS to
+        // unconditionally remain enabled, and disables FM impulse detection, 
+        // thereby avoiding RDS shutdown and allowing the device to continue to track 
+        // and decode RDS in very poor SNR environment
+
 	if (set) {
 		regs[SYSCONF1] |= RDS;
 		regs[SYSCONF3] |= RDSPRF;
@@ -328,6 +344,7 @@ void si_set_volume(uint16_t *regs, int volume)
 
 	regs[SYSCONF2] &= ~VOLUME; // clear volume bits
 	regs[SYSCONF2] |= volume;  // set new volume
+
 	si_update(regs);
 }
 

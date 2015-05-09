@@ -25,6 +25,8 @@
 #define _BM(bit) (1 << ((uint16_t)bit)) // convert bit number to bit mask
 #endif
 
+int verbose = 1;
+
 #define _BM(bit) (1 << ((uint16_t)bit)) // convert bit number to bit mask
 const char *rds_gt_00  = "Basic tuning and switching information";
 const char *rds_gt_01  = "Program-item number and slow labeling codes";
