@@ -1,5 +1,5 @@
 /*	Si4703 based RDS scanner
-	Copyright (c) 2014 Andrey Chilikin (https://github.com/achilikin)
+	Copyright (c) 2015 Andrey Chilikin (https://github.com/achilikin)
     
 	This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@ cmd_t commands[] = {
 	{ "seek", "seek up|down", cmd_seek },
 	{ "tune", "tune [freq]", cmd_tune },
 	{ "volume", "volume [0-15]", cmd_volume },
-	{ "rds", "rds [on|off|verbose] gt [0,...,15] [time sec] [log]", cmd_monitor },
+	{ "rds", "rds [on|off|verbose] gt [0,...,15] [time sec (0 - no timeout)] [log]", cmd_monitor },
 	{ "set", "set register value", cmd_set },
 };
 
@@ -42,24 +42,19 @@ static const uint32_t ncmd = sizeof(commands)/sizeof(commands[0]);
 
 int main(int argc, char **argv)
 {
+	char *arg = NULL;
 	char argbuf[BUFSIZ];
 	uint16_t si_regs[16];
 	memset(si_regs, 0, sizeof(si_regs));
 
-	if (argc == 1) {
-		printf("Supported commands:\n");
-		for(uint32_t i = 0; i < ncmd; i++) {
-			printf("    %s: %s\n", commands[i].name, commands[i].help);
-		}
-		return 0;
-	}
+	if (argc == 1)
+		goto print_help;
 
 	rpi_pin_init(RPI_REV2);
 	pi2c_open(PI2C_BUS);
 	pi2c_select(PI2C_BUS, SI4703_ADDR);
 
 	argbuf[0] = '\0';
-	char *arg = NULL;
 	if (argc > 2) {
 		for(int i = 2; i < argc; i++) {
 			if (i > 2)
@@ -75,5 +70,11 @@ int main(int argc, char **argv)
 	}
 
 	pi2c_close(PI2C_BUS);
+
+print_help:
+	printf("Supported commands:\n");
+	for(uint32_t i = 0; i < ncmd; i++) {
+		printf("    %s: %s\n", commands[i].name, commands[i].help);
+	}
 	return 0;
 }
