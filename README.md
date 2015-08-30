@@ -10,13 +10,13 @@ Installation
 
 Connect PL102RT-S V1.5 breakout to Rpi:
 
-| RPi   | PL102RT-S |
-| ----- |----------:|
-| SDA   | SDIO      |
-| SCL   | SCLK      |
-| #23   | RST       |
-| GND   | GND       |
-|3.3V   | Vd        |
+| RPi      | PL102RT-S |
+| -------- |----------:|
+| SDA      | SDIO      |
+| SCL      | SCLK      |
+| #23 (GP4)| RST       |
+| GND      | GND       |
+|3.3V      | Vd        |
 
 If in addition to RDS scanning you want to listen to radio audio then connect
 whatever amplifier you have to LOUT/ROUT. [Adafruit MAX98306](http://www.adafruit.com/products/987) works just fine.
@@ -32,7 +32,7 @@ Make RdSpi. It accepts one command at a time:
 * **_seek up|down_** - seeks to the next/prev station
 * **_tune freq_**  - tunes to specified FM frequency, for example `rdspi tune 9500` to tune to 95.00 MHz
 * **_rds on|off|verbose_** - sets RDS mode, on/off for RDSPRF, verbose for RDSM
-* **_rds gt_** - RDS Group Type to scan for, for example 0 for basic tuning and switching information
+* **_rds [gt G] [time T] [log] _** - scan for RDS messages. Use to _gt_ specify RDS Group Type to scan for, for example 0 for basic tuning and switching information. Use _time_ to specify timeout T in seconds. T = 0 turns off timeout. Use _log_ to scroll output instead on using one-liners. 
 * **_rds_** - scan for complete RDS PS and Radiotext messages with 15 seconds timeout
 * **_volume 0-15_** - set audio volume, 0 to mute
 * **_set register=value_** - set specified register
@@ -53,7 +53,7 @@ Screenshots
 * [rdspi dump](http://3.bp.blogspot.com/-OXuzT8qIl9Y/U4uHJIeWVyI/AAAAAAAAATQ/cm2Y-9AsPI0/s1600/dump.png)
 * [rdspi scan](http://4.bp.blogspot.com/-w3Rr9ScBuhA/U4uHeOIE43I/AAAAAAAAATY/xRO8Dcd-KSw/s1600/scan.png)
 * [rdspi spectrum](http://1.bp.blogspot.com/-7OW7MaMvY_M/U4uHlLo7ZaI/AAAAAAAAATg/le6EdWwt_OI/s1600/spectrum.png)
-* [rdspi rds](http://1.bp.blogspot.com/-Lwb6mZEmLF4/U4uH0sbmRTI/AAAAAAAAATo/-339yycuW_E/s1600/rds.png)
+* [rdspi rds log](http://1.bp.blogspot.com/-Lwb6mZEmLF4/U4uH0sbmRTI/AAAAAAAAATo/-339yycuW_E/s1600/rds.png)
 
 Links
 -----
