@@ -23,6 +23,7 @@ whatever amplifier you have to LOUT/ROUT. [Adafruit MAX98306](http://www.adafrui
 
 Make RdSpi. It accepts one command at a time:
 
+* **_cmd_** - run in interactive command mode
 * **_reset_** - resets and powers up Si4703, dumps register map while resetting
 * **_power on|down_** - powers Si4703 up or down
 * **_dump_** - dumps Si4703 register
@@ -45,6 +46,12 @@ rdspi tune 9500
 rdspi volume 10
 rdspi set volext=1
 rdspi dump
+```
+
+To disable output use ```--silent``` as the last command line parameter:
+```
+rdspi reset --silent
+rdspi tune 9500  --silent
 ```
 
 Screenshots

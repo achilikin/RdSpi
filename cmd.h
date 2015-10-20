@@ -27,7 +27,9 @@ extern "C" {
 #endif
 #endif
 
-typedef int (*cmd_handler)(char *arg);
+#define UNUSED(x) x __attribute__((unused))
+
+typedef int (*cmd_handler)(int fd, char *arg);
 
 typedef struct cmd {
 	const char *name;
@@ -35,20 +37,22 @@ typedef struct cmd {
 	cmd_handler cmd;
 } cmd_t;
 
-int cmd_dump(char *arg);
-int cmd_reset(char *arg);
-int cmd_power(char *arg);
-int cmd_scan(char *arg);
-int cmd_spectrum(char *arg);
-int cmd_spacing(char *arg);
-int cmd_seek(char *arg);
-int cmd_tune(char *arg);
-int cmd_monitor(char *arg);
-int cmd_volume(char *arg);
-int cmd_set(char *arg);
+int cmd_dump(int fd, char *arg);
+int cmd_reset(int fd, char *arg);
+int cmd_power(int fd, char *arg);
+int cmd_scan(int fd, char *arg);
+int cmd_spectrum(int fd, char *arg);
+int cmd_spacing(int fd, char *arg);
+int cmd_seek(int fd, char *arg);
+int cmd_tune(int fd, char *arg);
+int cmd_monitor(int fd, char *arg);
+int cmd_volume(int fd, char *arg);
+int cmd_set(int fd, char *arg);
 
 int cmd_arg(char *cmd, const char *str, char **arg);
 int cmd_is(char *str, const char *is);
+
+extern int stop;
 
 #ifdef __cplusplus
 }

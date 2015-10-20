@@ -137,7 +137,7 @@ extern "C" {
 
 int  si_read_regs(uint16_t *regs);
 int  si_update(uint16_t *regs);
-void si_dump(uint16_t *regs, const char *title, uint16_t span);
+void si_dump(int fd, uint16_t *regs, const char *title, uint16_t span);
 void si_power(uint16_t *regs, uint16_t mode);
 void si_set_volume(uint16_t *regs, int volume);
 

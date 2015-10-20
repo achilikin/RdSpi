@@ -19,10 +19,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <poll.h>
-#include <termios.h>
 
 #include "cmd.h"
+#include "cli.h"
 #include "rds.h"
 #include "pi2c.h"
 #include "si4703.h"
@@ -35,38 +34,6 @@ inline const char *is_on(uint16_t mask)
 {
 	if (mask) return "ON";
 	return "OFF";
-}
-
-static void stdin_mode(int raw)
-{
-	struct termios term_attr;
-
-	tcgetattr(STDIN_FILENO, &term_attr);
-	if (raw)
-		term_attr.c_lflag &= ~(ECHO | ICANON);
-	else
-		term_attr.c_lflag |= (ECHO | ICANON);
-	term_attr.c_cc[VMIN] = raw ? 0 : 1;
-	tcsetattr(STDIN_FILENO, TCSANOW, &term_attr);
-
-	return;
-}
-
-static int stdin_getch(int ms_timeout)
-{
-	struct pollfd polls;
-	polls.fd = STDIN_FILENO;
-	polls.events = POLLIN | POLLRDNORM | POLLRDBAND | POLLPRI;
-	polls.revents = 0;
-
-	if (poll(&polls, 1, ms_timeout) < 0)
-		return -1;
-
-	int ch = 0;
-	if (polls.revents)
-		read(STDIN_FILENO, &ch, 1);
-
-	return ch;
 }
 
 int cmd_arg(char *cmd, const char *str, char **arg)
@@ -96,7 +63,7 @@ int cmd_is(char *str, const char *is)
 	return cmd_arg(str, is, NULL);
 }
 
-int cmd_reset(char *arg __attribute__((unused)))
+int cmd_reset(int fd, UNUSED(char *arg))
 {
 	uint16_t si_regs[16];
 	si_read_regs(si_regs);
@@ -108,61 +75,61 @@ int cmd_reset(char *arg __attribute__((unused)))
 	rpi_delay_ms(1);
 
 	if (si_read_regs(si_regs) != 0) {
-		printf("Unable to read Si4703!\n");
-		return -1;
+		dprintf(fd, "Unable to read Si4703!\n");
+		return CLI_ENODEV;
 	}
-	si_dump(si_regs, "Reset Map:\n", 16);
+	si_dump(fd, si_regs, "Reset Map:\n", 16);
 
 	// enable the oscillator
 	si_regs[TEST1] |= XOSCEN;
 	si_update(si_regs);
 	rpi_delay_ms(500); // recommended delay
 	si_read_regs(si_regs);
-	si_dump(si_regs, "\nOscillator enabled:\n", 16);
+	si_dump(fd, si_regs, "\nOscillator enabled:\n", 16);
 	// the only way to reliable start the device is to powerdown and powerup
 	// just powering up does not work for me after cold start
 	uint8_t powerdown[2] = { 0, PWR_DISABLE | PWR_ENABLE };
 	pi2c_write(PI2C_BUS, powerdown, 2);
 	rpi_delay_ms(110);
 
-	cmd_power(const_cast<char *>("up"));
+	cmd_power(fd, const_cast<char *>("up"));
 	// tune to the local station with known signal strength
 	si_tune(si_regs, DEFAULT_STATION);
 	// si_tune() does not update registers
 	si_update(si_regs);
 	rpi_delay_ms(10);
 	si_read_regs(si_regs);
-	si_dump(si_regs, "\nTuned\n", 16);
+	si_dump(fd, si_regs, "\nTuned\n", 16);
 	return 0;
 }
 
-int cmd_power(char *arg)
+int cmd_power(int fd, char *arg)
 {
 	uint16_t si_regs[16];
 	si_read_regs(si_regs);
 
-	if (arg) {
+	if (arg && *arg) {
 		if (cmd_is(arg, "up")) {
 			si_power(si_regs, PWR_ENABLE);
-			si_dump(si_regs, "\nPowerup:\n", 16);
+			si_dump(fd, si_regs, "\nPowerup:\n", 16);
 			return 0;
 		}
 		if (cmd_is(arg, "down")) {
 			si_power(si_regs, PWR_DISABLE);
-			si_dump(si_regs, "\nPowerdown:\n", 16);
+			si_dump(fd, si_regs, "\nPowerdown:\n", 16);
 			return 0;
 		}
 	}
 
-	si_dump(si_regs, "\nPower:\n", 16);
+	si_dump(fd, si_regs, "\nPower:\n", 16);
 	return 0;
 }
 
-int cmd_dump(char *arg __attribute__((unused)))
+int cmd_dump(int fd, char *arg __attribute__((unused)))
 {
 	uint16_t si_regs[16];
 	si_read_regs(si_regs);
-	si_dump(si_regs, "Registers map:\n", 16);
+	si_dump(fd, si_regs, "Registers map:\n", 16);
 	return 0;
 }
 
@@ -179,7 +146,8 @@ static int get_ps_si(char *ps_name, uint16_t *regs, int timeout)
 		if (regs[STATUSRSSI] & RDSR) {
 			// basic tuning and switching information
 			if (RDS_GET_GT(regs[RDSB]) == RDS_GT_00A) {
-				rds_parse_gt00a(&regs[RDSA], &rd);
+				memcpy(rd.hdr.rds, &regs[RDSA], sizeof(rd.hdr.rds));
+				rds_parse_gt00a(rd.hdr.rds, &rd);
 			}
 			rpi_delay_ms(40); // Wait for the RDS bit to clear
 			dt += 40;
@@ -191,11 +159,11 @@ static int get_ps_si(char *ps_name, uint16_t *regs, int timeout)
 	}
 	strcpy(ps_name, rd.ps);
 	if (rd.valid == 0x0F)
-		return 0;
+		return rd.hdr.rds[0];
 	return -1;
 }
 
-int cmd_scan(char *arg) 
+int cmd_scan(int fd, char *arg)
 {
 	uint8_t mode = 0;
 	int nstations = 0;
@@ -206,13 +174,13 @@ int cmd_scan(char *arg)
 	si_regs[POWERCFG] |= SKMODE; // stop seeking at the upper or lower band limit
 
 	// mode as recommended in AN230, Table 23. Summary of Seek Settings
-	if (arg) {
+	if (arg && *arg) {
 		mode = atoi(arg);
 		if (mode > 5) mode = 5;
 	}
 
 	si_set_channel(si_regs, 0);
-	printf("scanning, press any key to terminate...\n");
+	dprintf(fd, "scanning, please wait...\n");
 
 	if (mode > 0) {
 		si_regs[SYSCONF2] &= 0x00FF;
@@ -246,21 +214,17 @@ int cmd_scan(char *arg)
 		si_update(si_regs);
 	}
 
-	int stop = 0;
-	stdin_mode(1);
-
-	while(stop == 0) {
+	while(1) {
 		freq = si_seek(si_regs, SEEK_UP);
 		if (freq == 0)
 			break;
 		seek = freq;
 		nstations++;
 		uint8_t rssi = si_regs[STATUSRSSI]	& RSSI;
-		printf("%5d ", freq);
+		dprintf(fd, "%5d ", freq);
 		for(int si = 0; si < rssi; si++)
-			printf("-");
-		printf(" %d", rssi);
-		fflush(stdout);
+			dprintf(fd, "-");
+		dprintf(fd, " %d", rssi);
 
 		int dt = 0;
 		if (rssi > RSSI_LIMIT) {
@@ -275,29 +239,25 @@ int cmd_scan(char *arg)
 		uint16_t st = si_regs[STATUSRSSI] & STEREO;
 
 		if (st) {
-			printf(" ST");
-			fflush(stdout);
+			dprintf(fd, " ST");
 			if (rssi > RSSI_LIMIT) {
 				int pi;
 				char ps_name[16];
 				if ((pi = get_ps_si(ps_name, si_regs, 5000)) != -1)
-					printf(" %04X '%s'", pi, ps_name);
+					dprintf(fd, " %04X '%s'", pi, ps_name);
 			}
 		}
-		printf("\n");
-		stop = stdin_getch(0);
+		dprintf(fd, "\n");
 	}
 	
-	stdin_mode(0);
-
 	si_regs[POWERCFG] &= ~SKMODE; // restore wrap mode
 	si_tune(si_regs, seek);
 
-	printf("%d stations found\n", nstations);
+	dprintf(fd, "%d stations found\n", nstations);
 	return 0;
 }
 
-int cmd_spectrum(char *arg)
+int cmd_spectrum(int fd, char *arg)
 {
 	uint16_t si_regs[16];
 	uint8_t rssi_limit = RSSI_LIMIT;
@@ -307,7 +267,7 @@ int cmd_spectrum(char *arg)
 	int space = (si_regs[SYSCONF2] >> 4) & 0x03;
 	int nchan = (si_band[band][1] - si_band[band][0]) / si_space[space];
 
-	if (arg)
+	if (arg && *arg)
 		rssi_limit = (uint8_t)atoi(arg);
 
 	for (int i = 0; i <= nchan; i++) {
@@ -331,11 +291,10 @@ int cmd_spectrum(char *arg)
 		}
 
 		uint8_t rssi = si_regs[STATUSRSSI]	& 0xFF;
-		printf("%5d ", si_band[band][0] + i*si_space[space]);
+		dprintf(fd, "%5d ", si_band[band][0] + i*si_space[space]);
 		for(int si = 0; si < rssi; si++)
-			printf("-");
-		printf(" %d", rssi);
-		fflush(stdout);
+			dprintf(fd, "-");
+		dprintf(fd, " %d", rssi);
 
 		int dt = 0;
 		if (rssi > rssi_limit) {
@@ -350,21 +309,20 @@ int cmd_spectrum(char *arg)
 		uint16_t st = si_regs[STATUSRSSI] & STEREO;
 
 		if (st) {
-			printf(" ST");
-			fflush(stdout);
+			dprintf(fd, " ST");
 			if (rssi > rssi_limit) {
 				int pi;
 				char ps_name[16];
 				if ((pi = get_ps_si(ps_name, si_regs, 5000)) != -1)
-					printf(" %04X '%s'", pi, ps_name);
+					dprintf(fd, " %04X '%s'", pi, ps_name);
 			}
 		}
-		printf("\n");
+		dprintf(fd, "\n");
 	}
 	return 0;
 }
 
-int cmd_seek(char *arg)
+int cmd_seek(int fd, char *arg)
 {
 	int dir = SEEK_UP;
 	uint16_t si_regs[16];
@@ -377,19 +335,19 @@ int cmd_seek(char *arg)
 	si_read_regs(si_regs);
 	int freq = si_seek(si_regs, dir);
 	if (freq == 0) {
-		printf("seek failed\n");
+		dprintf(fd, "seek failed\n");
 		return -1;
 	}
-	printf("tuned to %u\n", freq);
+	dprintf(fd, "tuned to %u\n", freq);
 	return 0;
 }
 
-int cmd_tune(char *arg)
+int cmd_tune(int fd, char *arg)
 {
 	int	freq = DEFAULT_STATION;
 	uint16_t si_regs[16];
 
-	if (arg)
+	if (arg && *arg)
 		freq = atoi(arg);
 
 	si_read_regs(si_regs);
@@ -397,26 +355,26 @@ int cmd_tune(char *arg)
 	si_read_regs(si_regs);
 	freq = si_get_freq(si_regs);
 	if (freq) {
-		printf("Tuned to %d.%02dMHz\n", freq/100, freq%100);
-		si_dump(si_regs, "Register map:\n", 16);
+		dprintf(fd, "Tuned to %d.%02dMHz\n", freq/100, freq%100);
+		si_dump(fd, si_regs, "Register map:\n", 16);
 		return 0;
 	}
 	return -1;
 }
 
-int cmd_spacing(char *arg)
+int cmd_spacing(int fd, char *arg)
 {
 	uint16_t spacing = 0;
 	uint16_t si_regs[16];
 	si_read_regs(si_regs);
 
-	if (arg) { // do we have an extra parameter?
+	if (arg && *arg) { // do we have an extra parameter?
 		spacing = atoi(arg);
 		if (spacing == 200) spacing = 0;
 		if (spacing == 100) spacing = 1;
 		if (spacing == 50)  spacing = 2;
 		if (spacing > 2) {
-			printf("Invalid spacing, use 200, 100, 50 kHz\n");
+			dprintf(fd, "Invalid spacing, use 200, 100, 50 kHz\n");
 			return -1;
 		}
 		si_regs[SYSCONF2] &= ~SPACING;
@@ -426,7 +384,7 @@ int cmd_spacing(char *arg)
 	}
 
 	spacing = (si_regs[SYSCONF2] & SPACING) >> 4;
-	printf("spacing %d\n", si_space[spacing]);
+	dprintf(fd, "spacing %d\n", si_space[spacing]);
 	return 0;
 }
 
@@ -439,13 +397,13 @@ static const char cur_hid[] = { 27, '[', '?', '2', '5', 'l','\0' }; // hide curs
 static const char txt_nor[] = { 27, '[', '0', 'm', '\0' }; // normal text
 static const char txt_rev[] = { 27, '[', '7', 'm', '\0' }; // reverse text
 
-static void print_rds_hdr(rds_hdr_t *phdr)
+static void print_rds_hdr(int fd, rds_hdr_t *phdr)
 {
-	printf("%04X %04X %04X %04X ", phdr->rds[0], phdr->rds[1], phdr->rds[2], phdr->rds[3]);
-	printf("| GT %02d%c PTY %2d TP %d | ", phdr->gt, 'A' + phdr->ver, phdr->pty, phdr->tp);
+	dprintf(fd, "%04X %04X %04X %04X ", phdr->rds[0], phdr->rds[1], phdr->rds[2], phdr->rds[3]);
+	dprintf(fd, "| GT %02d%c PTY %2d TP %d | ", phdr->gt, 'A' + phdr->ver, phdr->pty, phdr->tp);
 }
 
-static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, int log)
+static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t timeout, int log)
 { 
 	rds_gt00a_t rd0;
 	rds_gt01a_t rd1;
@@ -473,10 +431,9 @@ static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, i
 	uint32_t endTime  = 0;
 
 	int stop = 0;
-	stdin_mode(1);
 	if (!log)
-		printf("%s%s%s", clr_all, go_top, cur_hid);
-	printf("monitoring RDS, press any key to terminate...\n");
+		dprintf(fd, "%s%s%s", clr_all, go_top, cur_hid);
+	dprintf(fd, "monitoring RDS, press any key to terminate...\n");
 
 	while(stop == 0) {
 		if (timeout && (rt_mask == 0xFFFF) && (ps_mask == 0x0F))
@@ -500,9 +457,9 @@ static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, i
 				gtb_mask |= _BM(gt);
 
 			if (!log) {
-				printf("%s%s", go_top, txt_rev);
-				print_rds_hdr(&hdr);
-				printf("monitoring RDS, press any key to terminate...%s%s\n", clr_eol, txt_nor);
+				dprintf(fd, "%s%s", go_top, txt_rev);
+				print_rds_hdr(fd, &hdr);
+				dprintf(fd, "monitoring RDS, press any key to terminate...%s%s\n", clr_eol, txt_nor);
 			}
 
 			// 0A: basic tuning and switching information
@@ -555,98 +512,98 @@ static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, i
 
 			if (mask & _BM(0)) {
 				ps_mask = rd0.valid;
-				print_rds_hdr(&rd0.hdr);
-				printf("TA %d MS %c DI %X Ci %d PS '%s' AF %d %d (%d): ", 
+				print_rds_hdr(fd, &rd0.hdr);
+				dprintf(fd, "TA %d MS %c DI %X Ci %d PS '%s' AF %d %d (%d): ", 
 					rd0.ta, rd0.ms, rd0.di, rd0.ci, rd0.ps, regs[RDSC] &0xFF, regs[RDSC] >> 8, rd0.naf);
 				for(int i = 0; rd0.af[i]; i++)
-					printf("%d ", 8750 + rd0.af[i]*10);
-				printf("%s\n", log ? "" : clr_eol);
+					dprintf(fd, "%d ", 8750 + rd0.af[i]*10);
+				dprintf(fd, "%s\n", log ? "" : clr_eol);
 			}
 
 			if (mask & _BM(1)) {
-				print_rds_hdr(&rd1.hdr);
-				printf("RPC %d LA %d VC %d SLC %03X ", 
+				print_rds_hdr(fd, &rd1.hdr);
+				dprintf(fd, "RPC %d LA %d VC %d SLC %03X ", 
 					rd1.rpc, rd1.la, rd1.vc, rd1.slc);
 				if (rd1.pinc)
-					printf(" %02d %02d:%02d", rd1.pinc >> 11, 
+					dprintf(fd, " %02d %02d:%02d", rd1.pinc >> 11, 
 					(rd1.pinc >> 6) & 0x1F, rd1.pinc & 0x3F);
-				printf("%s\n", log ? "" : clr_eol);
+				dprintf(fd, "%s\n", log ? "" : clr_eol);
 			}
 
 			if (mask & _BM(2)) {
 				rt_mask = rd2.valid;
-				print_rds_hdr(&rd2.hdr);
-				printf("AB %c Si %2d ", 'A' + rd2.ab, rd2.si);
-				printf("RT '%s'", rd2.rt);
-				printf("%s\n", log ? "" : clr_eol);
+				print_rds_hdr(fd, &rd2.hdr);
+				dprintf(fd, "AB %c Si %2d ", 'A' + rd2.ab, rd2.si);
+				dprintf(fd, "RT '%s'", rd2.rt);
+				dprintf(fd, "%s\n", log ? "" : clr_eol);
 			}
 
 			if (mask & _BM(3)) {
-				print_rds_hdr(&rd3.hdr);
-				printf("AGTC %d%c Msg %04X AID %04X VC %d ",
+				print_rds_hdr(fd, &rd3.hdr);
+				dprintf(fd, "AGTC %d%c Msg %04X AID %04X VC %d ",
 					rd3.agtc, rd3.ver + 'A', rd3.msg, rd3.aid, rd3.vc);
 				if (rd3.vc == 0) {
-					printf("LTN %d ", rd3.ltn);
-					if (rd3.afi) printf("AFI ");
-					if (rd3.m)	 printf("M ");
-					if (rd3.i)	 printf("I ");
-					if (rd3.n)	 printf("N ");
-					if (rd3.r)	 printf("R ");
-					if (rd3.u)	 printf("U ");
+					dprintf(fd, "LTN %d ", rd3.ltn);
+					if (rd3.afi) dprintf(fd, "AFI ");
+					if (rd3.m)	 dprintf(fd, "M ");
+					if (rd3.i)	 dprintf(fd, "I ");
+					if (rd3.n)	 dprintf(fd, "N ");
+					if (rd3.r)	 dprintf(fd, "R ");
+					if (rd3.u)	 dprintf(fd, "U ");
 				}
 				else {
-					printf("SID %d ", rd3.sid);
+					dprintf(fd, "SID %d ", rd3.sid);
 					if (rd3.m)
-						printf("G %d Ta %d Tw %d Td %d", rd3.g, rd3.ta, rd3.tw, rd3.td);
+						dprintf(fd, "G %d Ta %d Tw %d Td %d", rd3.g, rd3.ta, rd3.tw, rd3.td);
 				}
-				printf("%s\n", log ? "" : clr_eol);
+				dprintf(fd, "%s\n", log ? "" : clr_eol);
 			}
 
 			if (mask & _BM(4)) {
-				print_rds_hdr(&rd4.hdr);
-				printf("%d/%02d/%02d %02d:%02d",
+				print_rds_hdr(fd, &rd4.hdr);
+				dprintf(fd, "%d/%02d/%02d %02d:%02d",
 					rd4.year, rd4.month, rd4.day, rd4.hour, rd4.minute);
 				if (rd4.tz_hour == 0 && rd4.tz_half == 0)
-					printf(" UTC");
+					dprintf(fd, " UTC");
 				else
-					printf(" TZ%c%d.%d", rd4.ts_sign ? '-' : '+',
+					dprintf(fd, " TZ%c%d.%d", rd4.ts_sign ? '-' : '+',
 					rd4.tz_hour, rd4.tz_half);
-				printf("%s\n", log ? "" : clr_eol);
+				dprintf(fd, "%s\n", log ? "" : clr_eol);
 			}
 
 			if (mask & _BM(8)) {
 				// check if 8A is Alert-C 
-				print_rds_hdr(&rd8.hdr);
+				print_rds_hdr(fd, &rd8.hdr);
 				if (rd3.agtc == 8 && rd3.ver == 0 && rd3.aid == 0xCD46) {
-					printf("S%d G%d CI%d ", rd8.x4, rd8.x3, rd8.x2);
+					dprintf(fd, "S%d G%d CI%d ", rd8.x4, rd8.x3, rd8.x2);
 					if (rd8.x3)
-						printf("D%d DIR%d Ext %d Eve %d Loc %04X",
+						dprintf(fd, "D%d DIR%d Ext %d Eve %d Loc %04X",
 						rd8.d, rd8.dir, rd8.ext, rd8.eve, rd8.loc);
 					else
-						printf("Y %04X Loc %04X", rd8.y, rd8.loc);
+						dprintf(fd, "Y %04X Loc %04X", rd8.y, rd8.loc);
 				}
 				else
-					printf("X4 %d VC %d", rd8.x4, rd8.vc);
-				printf("%s\n", log ? "" : clr_eol);
+					dprintf(fd, "X4 %d VC %d", rd8.x4, rd8.vc);
+				dprintf(fd, "%s\n", log ? "" : clr_eol);
 			}
 
 			if (mask & _BM(10)) {
-				print_rds_hdr(&rd10.hdr);
-				printf("AB %c Ci %d PTYN '%s'", 'A' + rd10.ab, rd10.ci, rd10.ps);
-				printf("%s\n", log ? "" : clr_eol);
+				print_rds_hdr(fd, &rd10.hdr);
+				dprintf(fd, "AB %c Ci %d PTYN '%s'", 'A' + rd10.ab, rd10.ci, rd10.ps);
+				dprintf(fd, "%s\n", log ? "" : clr_eol);
 			}
 
 			if (mask & _BM(14)) {
-				print_rds_hdr(&rd14.hdr);
-				printf("TP %d VC %2d ", rd14.tp_on, rd14.variant);
-				printf("I %04X ", rd14.info);
-				printf("PI %04X ", rd14.pi_on);
-				printf("PS '%s' ", rd14.ps);
+				print_rds_hdr(fd, &rd14.hdr);
+				dprintf(fd, "TP %d VC %2d ", rd14.tp_on, rd14.variant);
+				dprintf(fd, "I %04X ", rd14.info);
+				dprintf(fd, "PI %04X ", rd14.pi_on);
+				dprintf(fd, "PS '%s' ", rd14.ps);
 				if (rd14.avc & _BM(13))
-					printf("PTY %2d TA %d ", rd14.pty >> 11, rd14.pty & 0x01);
+					dprintf(fd, "PTY %2d TA %d ", rd14.pty >> 11, rd14.pty & 0x01);
 				if (rd14.avc & _BM(14))
-					printf("PIN %04X", rd14.pin);
-				printf("%s\n", log ? "" : clr_eol);
+					dprintf(fd, "PIN %04X", rd14.pin);
+				dprintf(fd, "%s\n", log ? "" : clr_eol);
 			}
 		}
 		else {
@@ -656,35 +613,35 @@ static void cmd_monitor_si(uint16_t *regs, uint16_t pr_mask, uint32_t timeout, i
 
 		if (timeout && (endTime >= timeout))
 			break;
-		stop = stdin_getch(0);
+//		stop = stdio_getch();
 	}
 
-	stdin_mode(0);
+	stdio_mode(STDIO_MODE_CANON);
 
 	int freq = si_get_freq(regs);
-	printf("\nScanned %d.%02d ", freq/100, freq%100);
+	dprintf(fd, "\nScanned %d.%02d ", freq/100, freq%100);
 	if (rd0.valid == 0x0F)
-		printf("'%s' ", rd0.ps);
-	printf("for %d ms\n", endTime);
+		dprintf(fd, "'%s' ", rd0.ps);
+	dprintf(fd, "for %d ms\n", endTime);
 	if (rd2.valid)
-		printf("Radiotext: '%s'\n", rd2.rt);
+		dprintf(fd, "Radiotext: '%s'\n", rd2.rt);
 	if (!gt_mask)
-		printf("no RDS detected\n");
+		dprintf(fd, "no RDS detected\n");
 	else {
-		printf("Active groups %04X:\n", gt_mask);
+		dprintf(fd, "Active groups %04X:\n", gt_mask);
 		for(int i = 0; i < 16; i++) {
 			if (gta_mask & (1 << i))
-				printf("    %02dA %s\n", i, rds_gt_name(i, 0));
+				dprintf(fd, "    %02dA %s\n", i, rds_gt_name(i, 0));
 			if (gtb_mask & (1 << i))
-				printf("    %02dB %s \n", i, rds_gt_name(i, 1));
+				dprintf(fd, "    %02dB %s \n", i, rds_gt_name(i, 1));
 		}
-		printf("\n");
+		dprintf(fd, "\n");
 	}
 	if (!log)
-		printf("%s", cur_vis);
+		dprintf(fd, "%s", cur_vis);
 }
 
-int cmd_monitor(char *arg)
+int cmd_monitor(int fd, char *arg)
 {
 	int log = 0;
 	uint16_t si_regs[16];
@@ -697,16 +654,16 @@ int cmd_monitor(char *arg)
 		si_set_rdsprf(si_regs, 1);
 		si_update(si_regs);
 		si_read_regs(si_regs);
-		printf("RDSPRF set to %s\n", is_on(si_regs[SYSCONF3] & RDSPRF));
-		si_dump(si_regs, "\nRegister map\n", 16);
+		dprintf(fd, "RDSPRF set to %s\n", is_on(si_regs[SYSCONF3] & RDSPRF));
+		si_dump(fd, si_regs, "\nRegister map\n", 16);
 		return 0;
 	}
 	if (cmd_is(arg, "off")) {
 		si_set_rdsprf(si_regs, 0);
 		si_update(si_regs);
 		si_read_regs(si_regs);
-		printf("RDSPRF set to %s\n", is_on(si_regs[SYSCONF3] & RDSPRF));
-		si_dump(si_regs, "\nRegister map\n", 16);
+		dprintf(fd, "RDSPRF set to %s\n", is_on(si_regs[SYSCONF3] & RDSPRF));
+		si_dump(fd, si_regs, "\nRegister map\n", 16);
 		return 0;
 	}
 	if (cmd_is(arg, "verbose")) {
@@ -714,8 +671,8 @@ int cmd_monitor(char *arg)
 		si_regs[POWERCFG] ^= RDSM;
 		si_update(si_regs);
 		si_read_regs(si_regs);
-		printf("RDSM set to %s\n", is_on(si_regs[POWERCFG] & RDSM));
-		si_dump(si_regs, "\nRegister map\n", 16);
+		dprintf(fd, "RDSM set to %s\n", is_on(si_regs[POWERCFG] & RDSM));
+		si_dump(fd, si_regs, "\nRegister map\n", 16);
 		return 0;
 	}
 
@@ -739,39 +696,36 @@ int cmd_monitor(char *arg)
 	if (cmd_is(arg, "log"))
 		log = 1;
 
-	cmd_monitor_si(si_regs, gtmask, timeout, log);
+	cmd_monitor_si(fd, si_regs, gtmask, timeout, log);
 	return 0;
 }
 
-int cmd_volume(char *arg)
+int cmd_volume(int fd, char *arg)
 {
 	uint8_t volume;
 	uint16_t si_regs[16];
 	si_read_regs(si_regs);
 
 	volume = si_regs[SYSCONF2] & VOLUME;
-	if (arg) {
+	if (arg && *arg) {
 		volume = atoi(arg);
 		si_set_volume(si_regs, volume);
 		return 0;
 	}
 
-	printf("volume %d\n", volume);
+	dprintf(fd, "volume %d\n", volume);
 	return 0;
 }
 
-int cmd_set(char *arg)
+int cmd_set(int fd, char *arg)
 {
 	uint16_t val;
 	const char *pval;
 	char buf[32];
 
-	if (arg == NULL)
+	if (arg == NULL || *arg == '\0')
 		return -1;
-
 	pval = arg;
-	if (pval == NULL)
-		return -1;
 	int i;
 	for(i = 0; i < 31; i++) {
 		if (*pval == '=')
@@ -788,7 +742,7 @@ int cmd_set(char *arg)
 	si_read_regs(regs);
 	if (si_set_state(regs, buf, val) != -1) {
 		si_update(regs);
-		si_dump(regs, arg, 16);
+		si_dump(fd, regs, arg, 16);
 		return 0;
 	}
 	return -1;

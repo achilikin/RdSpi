@@ -8,7 +8,7 @@
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
@@ -18,8 +18,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 
 #include "cmd.h"
+#include "cli.h"
 #include "pi2c.h"
 #include "rpi_pin.h"
 #include "si4703.h"
@@ -36,23 +38,58 @@ cmd_t commands[] = {
 	{ "volume", "volume [0-15]", cmd_volume },
 	{ "rds", "rds [on|off|verbose] gt [0,...,15] [time sec (0 - no timeout)] [log]", cmd_monitor },
 	{ "set", "set register value", cmd_set },
+	{ NULL, NULL, NULL }
 };
 
-static const uint32_t ncmd = sizeof(commands)/sizeof(commands[0]);
+int stop = 0;
+int stdio_cli_handler(console_io_t *cli, void *ptr);
 
 int main(int argc, char **argv)
 {
 	char *arg = NULL;
 	char argbuf[BUFSIZ];
-	uint16_t si_regs[16];
-	memset(si_regs, 0, sizeof(si_regs));
+	int  cmd_mode = 0, verbose = 1;
 
-	if (argc == 1)
-		goto print_help;
+	stdio_mode(STDIO_MODE_CANON);
+
+	if (argc == 2) {
+		if (cmd_is(argv[1], "cmd"))
+			cmd_mode = 1;
+		if (cmd_is(argv[1], "help"))
+			argc = 1;
+	}
+
+	if (argc == 1) {
+		printf("Supported commands:\n");
+		printf("    cmd: run in interactive command mode\n");
+		for(uint32_t i = 0; commands[i].name != NULL; i++) {
+			printf("    %s: %s\n", commands[i].name, commands[i].help);
+		}
+		return 0;
+	}
+
+	if (!cmd_mode && argc > 2 && cmd_is(argv[argc-1], "--silent")) {
+		verbose = 0;
+		argc--;
+	}
+
+	console_io_t cli;
+	memset(&cli, 0, sizeof(cli));
+
+	if (!verbose)
+		cli.ofd = open("/dev/null", O_WRONLY);
+	stdio_init(&cli, stdio_cli_handler);
+	stdio_mode(STDIO_MODE_RAW);
 
 	rpi_pin_init(RPI_REV2);
 	pi2c_open(PI2C_BUS);
 	pi2c_select(PI2C_BUS, SI4703_ADDR);
+
+	if (cmd_mode) {
+		while(!stop)
+			cli.interact(&cli, NULL);
+		goto restore;
+	}
 
 	argbuf[0] = '\0';
 	if (argc > 2) {
@@ -64,17 +101,16 @@ int main(int argc, char **argv)
 		arg = argbuf;
 	}
 
-	for(uint32_t i = 0; i < ncmd; i++) {
-		if (cmd_is(argv[1], commands[i].name))
-			return commands[i].cmd(arg);
+	for(uint32_t i = 0; commands[i].name != NULL; i++) {
+		if (cmd_is(argv[1], commands[i].name)) {
+			commands[i].cmd(cli.ofd, arg);
+			break;
+		}
 	}
 
+restore:
 	pi2c_close(PI2C_BUS);
+	stdio_mode(STDIO_MODE_CANON);
 
-print_help:
-	printf("Supported commands:\n");
-	for(uint32_t i = 0; i < ncmd; i++) {
-		printf("    %s: %s\n", commands[i].name, commands[i].help);
-	}
 	return 0;
 }

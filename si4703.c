@@ -224,10 +224,10 @@ static const char *si_parse_reg(uint16_t *regs, uint8_t reg)
 	return "";
 }
 
-void si_dump(uint16_t *regs, const char *title, uint16_t span)
+void si_dump(int fd, uint16_t *regs, const char *title, uint16_t span)
 {
 	if (title)
-		printf("%s", title);
+		dprintf(fd, "%s", title);
 	uint8_t start = (span >> 8) & 0xFF;
 	uint8_t num = span & 0xFF;
 	if (start > 15)
@@ -235,7 +235,7 @@ void si_dump(uint16_t *regs, const char *title, uint16_t span)
 	if ((start + num) > 16)
 		return;
 	for(uint8_t i = 0; i < num; i++)
-		printf("%X %04X%s\n", i, regs[start + i], si_parse_reg(regs, start + i));
+		dprintf(fd, "%X %04X%s\n", i, regs[start + i], si_parse_reg(regs, start + i));
 }
 
 int si_update(uint16_t *regs)
