@@ -49,6 +49,7 @@ struct console_io_s
 {
 	int  ifd; // input file descriptor
 	int  ofd; // output file descriptor
+	char prompt;
 	void *data;
 
 	cgetch_t *getch;

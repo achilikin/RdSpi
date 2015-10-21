@@ -219,8 +219,10 @@ static int stdio_interact(console_io_t *cli, void *ptr)
 		for(uint8_t i = 0; i < cl->cursor; i++)
 			cl->cmd[i] = '\0';
 		cl->cursor = 0;
-		if (!stop)
-			cli->puts(cli, "> ");
+		if (!stop && cli->prompt) {
+			cli->putch(cli, cli->prompt);
+			cli->putch(cli, ' ');
+		}
 		return 1;
 	}
 
@@ -266,5 +268,8 @@ void stdio_init(console_io_t *cli, cproc_t *cli_handler)
 	cli->interact = stdio_interact;
 	cli->proc  = cli_handler;
 
-	stdio_puts(cli, "> ");
+	if (cli->prompt) {
+		stdio_putch(cli, cli->prompt);
+		stdio_putch(cli, ' ');
+	}
 }

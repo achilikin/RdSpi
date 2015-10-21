@@ -319,7 +319,14 @@ void si_set_rdsprf(uint16_t *regs, int set)
 void si_set_volume(uint16_t *regs, int volume)
 {
 	if (volume < 0) volume = 0;
-	if (volume > 15) volume = 15;
+	if (volume > 30) volume = 30;
+
+	if (volume > 15) {
+		regs[SYSCONF3] |= VOLEXT;
+		volume -= 15;
+	}
+	else
+		regs[SYSCONF3] &= ~VOLEXT;
 
 	if (volume)
 		regs[POWERCFG] |= DSMUTE | DMUTE; // unmute

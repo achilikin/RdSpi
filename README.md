@@ -31,18 +31,18 @@ Make RdSpi. It accepts one command at a time:
 * **_scan (mode)_** - scans for radio stations, mode can be specified 1-5, see [AN230](http://www.silabs.com/Support%20Documents/TechnicalDocs/AN230.pdf), Table 23. Summary of Seek Settings
 * **_spectrum_** - scans full FM band and prints RSSI
 * **_seek up|down_** - seeks to the next/prev station
-* **_tune freq_**  - tunes to specified FM frequency, for example `rdspi tune 9500` to tune to 95.00 MHz
+* **_tune freq_**  - tunes to specified FM frequency, for example `rdspi tune 9500` or `rdspi tune 95.00` or `rdspi tune 95.` to tune to 95.00 MHz
 * **_rds on|off|verbose_** - sets RDS mode, on/off for RDSPRF, verbose for RDSM
 * **_rds [gt G] [time T] [log] _** - scan for RDS messages. Use to _gt_ specify RDS Group Type to scan for, for example 0 for basic tuning and switching information. Use _time_ to specify timeout T in seconds. T = 0 turns off timeout. Use _log_ to scroll output instead on using one-liners. 
-* **_rds_** - scan for complete RDS PS and Radiotext messages with 15 seconds timeout
-* **_volume 0-15_** - set audio volume, 0 to mute
+* **_rds_** - scan for complete RDS PS and Radiotext messages with default 15 seconds timeout
+* **_volume 0-30_** - set audio volume, 0 to mute
 * **_set register=value_** - set specified register
 
 It is better to start with `reset` :)
 
 ```
 rdspi reset
-rdspi tune 9500
+rdspi tune 95.00
 rdspi volume 10
 rdspi set volext=1
 rdspi dump

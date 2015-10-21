@@ -53,6 +53,7 @@ int cmd_arg(char *cmd, const char *str, char **arg);
 int cmd_is(char *str, const char *is);
 
 extern int stop;
+int is_stop(int *stop);
 
 #ifdef __cplusplus
 }

@@ -180,7 +180,7 @@ int cmd_scan(int fd, char *arg)
 	}
 
 	si_set_channel(si_regs, 0);
-	dprintf(fd, "scanning, please wait...\n");
+	dprintf(fd, "scanning, press any key to terminate...\n");
 
 	if (mode > 0) {
 		si_regs[SYSCONF2] &= 0x00FF;
@@ -214,7 +214,8 @@ int cmd_scan(int fd, char *arg)
 		si_update(si_regs);
 	}
 
-	while(1) {
+	int stop = 0;
+	while(!is_stop(&stop)) {
 		freq = si_seek(si_regs, SEEK_UP);
 		if (freq == 0)
 			break;
@@ -230,8 +231,8 @@ int cmd_scan(int fd, char *arg)
 		if (rssi > RSSI_LIMIT) {
 			while(dt < 10000) {
 				si_read_regs(si_regs);
-				if (si_regs[STATUSRSSI] & STEREO)
-					break;
+				if (si_regs[STATUSRSSI] & STEREO) break;
+				if (is_stop(&stop)) break;
 				rpi_delay_ms(10);
 				dt += 10;
 			}
@@ -270,7 +271,10 @@ int cmd_spectrum(int fd, char *arg)
 	if (arg && *arg)
 		rssi_limit = (uint8_t)atoi(arg);
 
-	for (int i = 0; i <= nchan; i++) {
+	dprintf(fd, "scanning, press any key to terminate...\n");
+
+	int stop = 0;
+	for (int i = 0; i <= nchan && !stop; i++, is_stop(&stop)) {
 		si_regs[CHANNEL] &= ~CHAN;
 		si_regs[CHANNEL] |= i;
 		si_regs[CHANNEL] |= TUNE;
@@ -280,6 +284,7 @@ int cmd_spectrum(int fd, char *arg)
 		while(1) {
 			si_read_regs(si_regs);
 			if (si_regs[STATUSRSSI] & STC) break;
+			if (is_stop(&stop)) break;
 			rpi_delay_ms(10);
 		}	
 		si_regs[CHANNEL] &= ~TUNE;
@@ -287,6 +292,7 @@ int cmd_spectrum(int fd, char *arg)
 		while(i) {
 			si_read_regs(si_regs);
 			if(!(si_regs[STATUSRSSI] & STC)) break;
+			if (is_stop(&stop)) break;
 			rpi_delay_ms(10);
 		}
 
@@ -300,8 +306,8 @@ int cmd_spectrum(int fd, char *arg)
 		if (rssi > rssi_limit) {
 			while(dt < 3000) {
 				si_read_regs(si_regs);
-				if (si_regs[STATUSRSSI] & STEREO)
-					break;
+				if (si_regs[STATUSRSSI] & STEREO) break;
+				if (is_stop(&stop)) break;
 				rpi_delay_ms(10);
 				dt += 10;
 			}
@@ -329,8 +335,14 @@ int cmd_seek(int fd, char *arg)
 
 	if (cmd_is(arg, "up"))
 		dir = SEEK_UP;
-	if (cmd_is(arg, "down"))
+	else if (cmd_is(arg, "down"))
 		dir = SEEK_DOWN;
+	else {
+		dprintf(fd, "wrong seeking direction\n");
+		return -1;
+	}
+
+	dprintf(fd, "seeking %s\n", arg);
 
 	si_read_regs(si_regs);
 	int freq = si_seek(si_regs, dir);
@@ -344,11 +356,18 @@ int cmd_seek(int fd, char *arg)
 
 int cmd_tune(int fd, char *arg)
 {
-	int	freq = DEFAULT_STATION;
+	unsigned freq = DEFAULT_STATION;
 	uint16_t si_regs[16];
 
-	if (arg && *arg)
-		freq = atoi(arg);
+	if (arg && *arg) {
+		freq = strtol(arg, &arg, 10);
+		if (*arg == '.') {
+			unsigned decimal = strtol(arg + 1, NULL, 10);
+			if (decimal > 100)
+				decimal = 0;
+			freq = freq * 100 + decimal;
+		}
+	}
 
 	si_read_regs(si_regs);
 	si_tune(si_regs, freq);
@@ -430,12 +449,12 @@ static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t ti
 	uint16_t ps_mask  = 0;
 	uint32_t endTime  = 0;
 
-	int stop = 0;
-	if (!log)
+	if (!log) {
 		dprintf(fd, "%s%s%s", clr_all, go_top, cur_hid);
-	dprintf(fd, "monitoring RDS, press any key to terminate...\n");
+		dprintf(fd, "monitoring RDS, press any key to terminate...%s%s\n", clr_eol, txt_nor);
+	}
 
-	while(stop == 0) {
+	while(!is_stop(NULL)) {
 		if (timeout && (rt_mask == 0xFFFF) && (ps_mask == 0x0F))
 			break;
 		si_read_regs(regs);
@@ -613,10 +632,7 @@ static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t ti
 
 		if (timeout && (endTime >= timeout))
 			break;
-//		stop = stdio_getch();
 	}
-
-	stdio_mode(STDIO_MODE_CANON);
 
 	int freq = si_get_freq(regs);
 	dprintf(fd, "\nScanned %d.%02d ", freq/100, freq%100);

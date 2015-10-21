@@ -35,26 +35,40 @@ cmd_t commands[] = {
 	{ "spectrum", "spectrum [rssi limit]", cmd_spectrum },
 	{ "seek", "seek up|down", cmd_seek },
 	{ "tune", "tune [freq]", cmd_tune },
-	{ "volume", "volume [0-15]", cmd_volume },
+	{ "volume", "volume [0-30]", cmd_volume },
 	{ "rds", "rds [on|off|verbose] gt [0,...,15] [time sec (0 - no timeout)] [log]", cmd_monitor },
 	{ "set", "set register value", cmd_set },
 	{ NULL, NULL, NULL }
 };
 
 int stop = 0;
+console_io_t cli;
 int stdio_cli_handler(console_io_t *cli, void *ptr);
+
+int is_stop(int *pstop)
+{
+	int stop = cli.getch(&cli);
+	if (pstop) {
+		if (*pstop)
+			stop = *pstop;
+		else
+			*pstop = stop;
+	}
+	return stop;
+}
 
 int main(int argc, char **argv)
 {
 	char *arg = NULL;
 	char argbuf[BUFSIZ];
 	int  cmd_mode = 0, verbose = 1;
-
 	stdio_mode(STDIO_MODE_CANON);
 
 	if (argc == 2) {
-		if (cmd_is(argv[1], "cmd"))
+		if (cmd_is(argv[1], "cmd")) {
 			cmd_mode = 1;
+			cli.prompt = '>';
+		}
 		if (cmd_is(argv[1], "help"))
 			argc = 1;
 	}
@@ -69,12 +83,10 @@ int main(int argc, char **argv)
 	}
 
 	if (!cmd_mode && argc > 2 && cmd_is(argv[argc-1], "--silent")) {
+		cli.prompt = '\0';
 		verbose = 0;
 		argc--;
 	}
-
-	console_io_t cli;
-	memset(&cli, 0, sizeof(cli));
 
 	if (!verbose)
 		cli.ofd = open("/dev/null", O_WRONLY);
