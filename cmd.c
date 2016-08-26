@@ -106,7 +106,8 @@ int cmd_reset(int fd, UNUSED(char *arg))
 int cmd_power(int fd, char *arg)
 {
 	uint16_t si_regs[16];
-	si_read_regs(si_regs);
+	if (si_read_regs(si_regs) != 0)
+		return CLI_ENODEV;
 
 	if (arg && *arg) {
 		if (cmd_is(arg, "up")) {
@@ -128,9 +129,11 @@ int cmd_power(int fd, char *arg)
 int cmd_dump(int fd, char *arg __attribute__((unused)))
 {
 	uint16_t si_regs[16];
-	si_read_regs(si_regs);
-	si_dump(fd, si_regs, "Registers map:\n", 16);
-	return 0;
+	if (si_read_regs(si_regs) == 0) {
+		si_dump(fd, si_regs, "Registers map:\n", 16);
+		return 0;
+	}
+	return CLI_ENODEV;
 }
 
 static int get_ps_si(char *ps_name, uint16_t *regs, int timeout)
@@ -170,7 +173,9 @@ int cmd_scan(int fd, char *arg)
 	int freq, seek = 0;
 	uint16_t si_regs[16];
 
-	si_read_regs(si_regs);
+	if (si_read_regs(si_regs) != 0)
+		return CLI_ENODEV;
+
 	si_regs[POWERCFG] |= SKMODE; // stop seeking at the upper or lower band limit
 
 	// mode as recommended in AN230, Table 23. Summary of Seek Settings
@@ -263,7 +268,8 @@ int cmd_spectrum(int fd, char *arg)
 	uint16_t si_regs[16];
 	uint8_t rssi_limit = RSSI_LIMIT;
 
-	si_read_regs(si_regs);
+	if (si_read_regs(si_regs) != 0)
+		return CLI_ENODEV;
 	int band = (si_regs[SYSCONF2] >> 6) & 0x03;
 	int space = (si_regs[SYSCONF2] >> 4) & 0x03;
 	int nchan = (si_band[band][1] - si_band[band][0]) / si_space[space];
@@ -344,7 +350,8 @@ int cmd_seek(int fd, char *arg)
 
 	dprintf(fd, "seeking %s\n", arg);
 
-	si_read_regs(si_regs);
+	if (si_read_regs(si_regs) != 0)
+		return CLI_ENODEV;
 	int freq = si_seek(si_regs, dir);
 	if (freq == 0) {
 		dprintf(fd, "seek failed\n");
@@ -369,7 +376,8 @@ int cmd_tune(int fd, char *arg)
 		}
 	}
 
-	si_read_regs(si_regs);
+	if (si_read_regs(si_regs) != 0)
+		return CLI_ENODEV;
 	si_tune(si_regs, freq);
 	si_read_regs(si_regs);
 	freq = si_get_freq(si_regs);
@@ -385,7 +393,8 @@ int cmd_spacing(int fd, char *arg)
 {
 	uint16_t spacing = 0;
 	uint16_t si_regs[16];
-	si_read_regs(si_regs);
+	if (si_read_regs(si_regs) != 0)
+		return CLI_ENODEV;
 
 	if (arg && *arg) { // do we have an extra parameter?
 		spacing = atoi(arg);
@@ -422,6 +431,14 @@ static void print_rds_hdr(int fd, rds_hdr_t *phdr)
 	dprintf(fd, "| GT %02d%c PTY %2d TP %d | ", phdr->gt, 'A' + phdr->ver, phdr->pty, phdr->tp);
 }
 
+/* default printer for 'rds log' command */
+static void print_rds(int fd, rds_hdr_t *phdr, int log)
+{
+	print_rds_hdr(fd, phdr);
+	dprintf(fd, "%02X %04X %04X", phdr->rds[1] & 0x1F, phdr->rds[2], phdr->rds[3]);
+	dprintf(fd, "%s\n", log ? "" : clr_eol);
+}
+
 static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t timeout, int log)
 { 
 	rds_gt00a_t rd0;
@@ -429,15 +446,17 @@ static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t ti
 	rds_gt02a_t rd2;
 	rds_gt03a_t rd3;
 	rds_gt04a_t rd4;
+	rds_gt05a_t rd5;
 	rds_gt08a_t rd8;
 	rds_gt10a_t rd10;
 	rds_gt14a_t rd14;
+	rds_hdr_t   rds[16];
 
 	memset(&rd0, 0, sizeof(rd0));
 	memset(&rd1, 0, sizeof(rd1));
 	memset(&rd2, 0, sizeof(rd2));
 	memset(&rd3, 0, sizeof(rd3));
-	memset(&rd4, 0, sizeof(rd4));
+	memset(&rd5, 0, sizeof(rd5));
 	memset(&rd8, 0, sizeof(rd8));
 	memset(&rd10, 0, sizeof(rd10));
 	memset(&rd14, 0, sizeof(rd14));
@@ -468,6 +487,7 @@ static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t ti
 			hdr.tp  = (regs[RDSB] >> 10) & 0x01;
 			hdr.pty = (regs[RDSB] >> 5) & 0x1F;
 			memcpy(hdr.rds, &regs[RDSA], sizeof(hdr.rds));
+			memcpy(&rds[gt], &hdr, sizeof(hdr));
 
 			gt_mask |= _BM(gt);
 			if (!ver)
@@ -505,6 +525,11 @@ static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t ti
 			if (gtv == RDS_GT_04A) {
 				memcpy(&rd4.hdr, &hdr, sizeof(hdr));
 				rds_parse_gt04a(&regs[RDSA], &rd4);
+			}
+			// 5A: Transparent data channels or ODA
+			if (gtv == RDS_GT_05A) {
+				memcpy(&rd5.hdr, &hdr, sizeof(hdr));
+				rds_parse_gt05a(&regs[RDSA], &rd5);
 			}
 			// 8A: Traffic Message Channel
 			if (gtv == RDS_GT_08A) {
@@ -590,6 +615,22 @@ static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t ti
 				dprintf(fd, "%s\n", log ? "" : clr_eol);
 			}
 
+			if (mask & _BM(5)) {
+				print_rds_hdr(fd, &rd5.hdr);
+				for (uint8_t i = 0; i < 32; i++) {
+					if (rd5.channel & (1u << i))
+						dprintf(fd, "TDS[%u] %04X %04X ",
+							i, rd5.tds[i][0], rd5.tds[i][1]);
+				}
+				dprintf(fd, "%s\n", log ? "" : clr_eol);
+			}
+
+			if (mask & _BM(6))
+				print_rds(fd, &rds[6], log);
+
+			if (mask & _BM(7))
+				print_rds(fd, &rds[7], log);
+			
 			if (mask & _BM(8)) {
 				// check if 8A is Alert-C 
 				print_rds_hdr(fd, &rd8.hdr);
@@ -606,11 +647,23 @@ static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t ti
 				dprintf(fd, "%s\n", log ? "" : clr_eol);
 			}
 
+			if (mask & _BM(9))
+				print_rds(fd, &rds[9], log);
+
 			if (mask & _BM(10)) {
 				print_rds_hdr(fd, &rd10.hdr);
 				dprintf(fd, "AB %c Ci %d PTYN '%s'", 'A' + rd10.ab, rd10.ci, rd10.ps);
 				dprintf(fd, "%s\n", log ? "" : clr_eol);
 			}
+			
+			if (mask & _BM(11))
+				print_rds(fd, &rds[11], log);
+			
+			if (mask & _BM(12))
+				print_rds(fd, &rds[12], log);
+
+			if (mask & _BM(13))
+				print_rds(fd, &rds[13], log);
 
 			if (mask & _BM(14)) {
 				print_rds_hdr(fd, &rd14.hdr);
@@ -624,6 +677,9 @@ static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t ti
 					dprintf(fd, "PIN %04X", rd14.pin);
 				dprintf(fd, "%s\n", log ? "" : clr_eol);
 			}
+
+			if (mask & _BM(15))
+				print_rds(fd, &rds[15], log);
 		}
 		else {
 			rpi_delay_ms(30);

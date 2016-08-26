@@ -244,6 +244,16 @@ int rds_parse_gt04a(uint16_t *prds, rds_gt04a_t *pgt)
 	return 0;
 }
 
+int rds_parse_gt05a(uint16_t *prds, rds_gt05a_t *pgt)
+{
+	uint8_t channel = prds[RDS_B] & 0x001F;
+	pgt->channel |= 1u << channel;
+	pgt->tds[channel][0] = prds[RDS_C];
+	pgt->tds[channel][1] = prds[RDS_D];
+
+	return 0;
+}
+
 int rds_parse_gt08a(uint16_t *prds, rds_gt08a_t *pgt)
 {
 	if (pgt->spn[0] == '\0') {

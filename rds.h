@@ -73,8 +73,9 @@ extern "C" {
 #define RDS_GT_01A RDS_GT(1,0)
 #define RDS_GT_02A RDS_GT(2,0)
 #define RDS_GT_03A RDS_GT(3,0)
-#define RDS_GT_08A RDS_GT(8,0)
 #define RDS_GT_04A RDS_GT(4,0)
+#define RDS_GT_05A RDS_GT(5,0)
+#define RDS_GT_08A RDS_GT(8,0)
 #define RDS_GT_10A RDS_GT(10,0)
 #define RDS_GT_14A RDS_GT(14,0)
 
@@ -167,6 +168,13 @@ typedef struct rds_gt04a_s
 	uint16_t year;
 } rds_gt04a_t;
 
+typedef struct rds_gt05a_s
+{
+	rds_hdr_t hdr;
+	uint32_t  channel;
+	uint16_t  tds[32][2];
+} rds_gt05a_t;
+
 typedef struct rds_gt08a_s
 {
 	rds_hdr_t hdr;
@@ -214,6 +222,7 @@ int rds_parse_gt01a(uint16_t *prds, rds_gt01a_t *pgt);
 int rds_parse_gt02a(uint16_t *prds, rds_gt02a_t *pgt);
 int rds_parse_gt03a(uint16_t *prds, rds_gt03a_t *pgt);
 int rds_parse_gt04a(uint16_t *prds, rds_gt04a_t *pgt);
+int rds_parse_gt05a(uint16_t *prds, rds_gt05a_t *pgt);
 int rds_parse_gt08a(uint16_t *prds, rds_gt08a_t *pgt);
 int rds_parse_gt10a(uint16_t *prds, rds_gt10a_t *pgt);
 int rds_parse_gt14a(uint16_t *prds, rds_gt14a_t *pgt);

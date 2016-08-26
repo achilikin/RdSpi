@@ -115,7 +115,8 @@ int main(int argc, char **argv)
 
 	for(uint32_t i = 0; commands[i].name != NULL; i++) {
 		if (cmd_is(argv[1], commands[i].name)) {
-			commands[i].cmd(cli.ofd, arg);
+			if (commands[i].cmd(cli.ofd, arg) != 0)
+				dprintf(cli.ofd, "Communication error\n");
 			break;
 		}
 	}
