@@ -18,6 +18,8 @@ Connect PL102RT-S V1.5 breakout to Rpi:
 | GND      | GND       |
 |3.3V      | Vd        |
 
+To make communication more stable connect RST pin to a pullup resistor.
+
 If in addition to RDS scanning you want to listen to radio audio then connect
 whatever amplifier you have to LOUT/ROUT. [Adafruit MAX98306](http://www.adafruit.com/products/987) works just fine.
 
