@@ -40,20 +40,20 @@ Make RdSpi. It accepts one command at a time:
 * **_volume 0-30_** - set audio volume, 0 to mute
 * **_set register=value_** - set specified register
 
-It is better to start with `reset` :)
+It is better to start with `reset` :) Note that `reset` requires `sudo` to write to reset pin, other commands can be used without `sudo`. 
 
 ```
-rdspi reset
-rdspi tune 95.00
-rdspi volume 10
-rdspi set volext=1
-rdspi dump
+$sudo rdspi reset
+$rdspi tune 95.00
+$rdspi volume 10
+$rdspi set volext=1
+$rdspi dump
 ```
 
 To disable output use ```--silent``` as the last command line parameter:
 ```
-rdspi reset --silent
-rdspi tune 9500  --silent
+$sudo rdspi reset --silent
+$rdspi tune 9500  --silent
 ```
 
 Screenshots
