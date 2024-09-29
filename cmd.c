@@ -1,6 +1,6 @@
-/*	CLI commands hadlers for Si4703 based RDS scanner
+/*	CLI commands handlers for Si4703 based RDS scanner
 	Copyright (c) 2014 Andrey Chilikin (https://github.com/achilikin)
-    
+
 	This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 2 of the License, or
@@ -29,6 +29,7 @@
 
 #define RSSI_LIMIT 35
 #define DEFAULT_STATION 9500 // Local station with the good signal strength
+#define DEFAULT_RDS_SCAN_TIMEOUT 15000 // Default RDS scan timeout in milliseconds
 
 inline const char *is_on(uint16_t mask)
 {
@@ -137,7 +138,7 @@ int cmd_dump(int fd, char *arg __attribute__((unused)))
 }
 
 static int get_ps_si(char *ps_name, uint16_t *regs, int timeout)
-{ 
+{
 	int dt = 0;
 	rds_gt00a_t rd;
 	memset(&rd, 0, sizeof(rd));
@@ -255,7 +256,7 @@ int cmd_scan(int fd, char *arg)
 		}
 		dprintf(fd, "\n");
 	}
-	
+
 	si_regs[POWERCFG] &= ~SKMODE; // restore wrap mode
 	si_tune(si_regs, seek);
 
@@ -292,7 +293,7 @@ int cmd_spectrum(int fd, char *arg)
 			if (si_regs[STATUSRSSI] & STC) break;
 			if (is_stop(&stop)) break;
 			rpi_delay_ms(10);
-		}	
+		}
 		si_regs[CHANNEL] &= ~TUNE;
 		si_update(si_regs);
 		while(i) {
@@ -440,7 +441,7 @@ static void print_rds(int fd, rds_hdr_t *phdr, int log)
 }
 
 static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t timeout, int log)
-{ 
+{
 	rds_gt00a_t rd0;
 	rds_gt01a_t rd1;
 	rds_gt02a_t rd2;
@@ -557,7 +558,7 @@ static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t ti
 			if (mask & _BM(0)) {
 				ps_mask = rd0.valid;
 				print_rds_hdr(fd, &rd0.hdr);
-				dprintf(fd, "TA %d MS %c DI %X Ci %d PS '%s' AF %d %d (%d): ", 
+				dprintf(fd, "TA %d MS %c DI %X Ci %d PS '%s' AF %d %d (%d): ",
 					rd0.ta, rd0.ms, rd0.di, rd0.ci, rd0.ps, regs[RDSC] &0xFF, regs[RDSC] >> 8, rd0.naf);
 				for(int i = 0; rd0.af[i]; i++)
 					dprintf(fd, "%d ", 8750 + rd0.af[i]*10);
@@ -566,10 +567,10 @@ static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t ti
 
 			if (mask & _BM(1)) {
 				print_rds_hdr(fd, &rd1.hdr);
-				dprintf(fd, "RPC %d LA %d VC %d SLC %03X ", 
+				dprintf(fd, "RPC %d LA %d VC %d SLC %03X ",
 					rd1.rpc, rd1.la, rd1.vc, rd1.slc);
 				if (rd1.pinc)
-					dprintf(fd, " %02d %02d:%02d", rd1.pinc >> 11, 
+					dprintf(fd, " %02d %02d:%02d", rd1.pinc >> 11,
 					(rd1.pinc >> 6) & 0x1F, rd1.pinc & 0x3F);
 				dprintf(fd, "%s\n", log ? "" : clr_eol);
 			}
@@ -630,9 +631,9 @@ static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t ti
 
 			if (mask & _BM(7))
 				print_rds(fd, &rds[7], log);
-			
+
 			if (mask & _BM(8)) {
-				// check if 8A is Alert-C 
+				// check if 8A is Alert-C
 				print_rds_hdr(fd, &rd8.hdr);
 				if (rd3.agtc == 8 && rd3.ver == 0 && rd3.aid == 0xCD46) {
 					dprintf(fd, "S%d G%d CI%d ", rd8.x4, rd8.x3, rd8.x2);
@@ -655,10 +656,10 @@ static void cmd_monitor_si(int fd, uint16_t *regs, uint16_t pr_mask, uint32_t ti
 				dprintf(fd, "AB %c Ci %d PTYN '%s'", 'A' + rd10.ab, rd10.ci, rd10.ps);
 				dprintf(fd, "%s\n", log ? "" : clr_eol);
 			}
-			
+
 			if (mask & _BM(11))
 				print_rds(fd, &rds[11], log);
-			
+
 			if (mask & _BM(12))
 				print_rds(fd, &rds[12], log);
 
@@ -718,7 +719,7 @@ int cmd_monitor(int fd, char *arg)
 	int log = 0;
 	uint16_t si_regs[16];
 	uint16_t gtmask = 0xFFFF;
-	uint32_t timeout = 15000;
+	uint32_t timeout = DEFAULT_RDS_SCAN_TIMEOUT;
 
 	si_read_regs(si_regs);
 
